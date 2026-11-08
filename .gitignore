@@ -1,0 +1,34 @@
+# CMake and generated build trees
+/build/
+/cmake-build-*/
+/out/
+/cmake-out-*/
+
+# Visual Studio
+.vs/
+*.suo
+*.user
+*.VC.db
+*.VC.VC.opendb
+*.sln
+*.slnx
+*.vcxproj
+*.vcxproj.filters
+*.vcxproj.user
+
+# Generated binaries and intermediate objects
+*.exe
+*.dll
+*.lib
+*.pdb
+*.ilk
+*.obj
+*.pch
+*.idb
+*.ipch
+*.tlog/
+*.recipe
+
+# IDE metadata
+.vscode/
+.idea/
