@@ -73,6 +73,20 @@ target_sources(OfforSampleForge
         Source/Processing/AudioRenderJob.cpp
         Source/Processing/ProcessingPanel.h
         Source/Processing/ProcessingPanel.cpp
+        Source/Variations/Variation.h
+        Source/Variations/Variation.cpp
+        Source/Variations/VariationSettings.h
+        Source/Variations/VariationSettings.cpp
+        Source/Variations/VariationEngine.h
+        Source/Variations/VariationEngine.cpp
+        Source/Variations/VariationHistory.h
+        Source/Variations/VariationHistory.cpp
+        Source/Variations/VariationLockManager.h
+        Source/Variations/VariationLockManager.cpp
+        Source/Variations/VariationRenderer.h
+        Source/Variations/VariationRenderer.cpp
+        Source/Variations/VariationPanel.h
+        Source/Variations/VariationPanel.cpp
 )
 
 target_compile_features(OfforSampleForge PRIVATE cxx_std_17)
@@ -114,6 +128,12 @@ if(OFFOR_BUILD_STAGE2_TESTS)
         Source/Processing/EffectProcessor.cpp
         Source/Processing/ProcessingHistory.cpp
         Source/Processing/AudioRenderJob.cpp
+        Source/Variations/Variation.cpp
+        Source/Variations/VariationSettings.cpp
+        Source/Variations/VariationEngine.cpp
+        Source/Variations/VariationHistory.cpp
+        Source/Variations/VariationLockManager.cpp
+        Source/Variations/VariationRenderer.cpp
     )
     target_compile_features(OfforStage2Tests PRIVATE cxx_std_17)
     target_compile_definitions(OfforStage2Tests PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 JUCE_REPORT_APP_USAGE=0 JUCE_MODAL_LOOPS_PERMITTED=1)

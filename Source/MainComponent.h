@@ -5,6 +5,7 @@
 #include "Project/ProjectManager.h"
 #include "Samples/SampleImporter.h"
 #include "Processing/ProcessingPanel.h"
+#include "Variations/VariationPanel.h"
 
 class MainComponent final : public juce::AudioAppComponent
 {
@@ -49,6 +50,7 @@ private:
     juce::AudioThumbnailCache thumbnailCache { 16 };
     juce::AudioThumbnail thumbnail { 512, formatManager, thumbnailCache };
     ProcessingPanel processingPanel;
+    VariationPanel variationPanel { formatManager, thumbnailCache };
 
     std::unique_ptr<juce::AudioFormatReaderSource> currentReaderSource;
     std::unique_ptr<juce::FileChooser> fileChooser;

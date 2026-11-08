@@ -3,7 +3,7 @@
 bool ProjectManager::create(const juce::File& file, const juce::String& projectName)
 {
     if (projectName.trim().isEmpty() || !file.getParentDirectory().createDirectory()) return false;
-    projectFile = file; name = projectName.trim(); samples.clear(); selectedSampleId.clear(); processingChainSettings.clear(); processingOperations = {}; processingHistory.clear();
+    projectFile = file; name = projectName.trim(); samples.clear(); selectedSampleId.clear(); processingChainSettings.clear(); processingOperations = {}; processingHistory.clear(); variationSettings={};variationHistory=VariationHistory{};
     openState = true;
     exportSettings = new juce::DynamicObject();
     if (!getAssetsDirectory().createDirectory()) return false;
@@ -15,7 +15,7 @@ bool ProjectManager::open(const juce::File& file, juce::String& error)
     auto parsed = juce::JSON::parse(file);
     auto* root = parsed.getDynamicObject();
     const int schema = root == nullptr ? 0 : (int)root->getProperty("schemaVersion");
-    if (root == nullptr || (schema != 1 && schema != 2))
+    if (root == nullptr || (schema < 1 || schema > 3))
     { error = "Invalid project file or unsupported schema version."; return false; }
     juce::Array<SampleRecord> loaded;
     auto list = root->getProperty("samples");
@@ -32,17 +32,19 @@ bool ProjectManager::open(const juce::File& file, juce::String& error)
     ProcessingHistory loadedHistory;
     if (root->hasProperty("processingHistory") && !loadedHistory.fromVar(root->getProperty("processingHistory"))) { error = "Project processing history is invalid."; return false; }
     auto loadedOperations = root->hasProperty("processingOperations") ? RenderOperations::fromVar(root->getProperty("processingOperations")) : RenderOperations {};
+    VariationSettings loadedVariationSettings=root->hasProperty("variationSettings")?VariationSettings::fromVar(root->getProperty("variationSettings")):VariationSettings{};
+    VariationHistory loadedVariationHistory;if(root->hasProperty("variations")&&!loadedVariationHistory.fromVar(root->getProperty("variations"))){error="Project variation history is invalid.";return false;}
     projectFile = file; name = (root->hasProperty("name") ? root->getProperty("name") : juce::var(file.getFileNameWithoutExtension())).toString();
     openState = true; samples = loaded; selectedSampleId = root->getProperty("selectedSampleId").toString();
     if (auto* settings = root->getProperty("exportSettings").getDynamicObject()) exportSettings = settings; else exportSettings = new juce::DynamicObject();
-    processingChainSettings = std::move(loadedChain); processingOperations = loadedOperations; processingHistory = std::move(loadedHistory);
+    processingChainSettings = std::move(loadedChain); processingOperations = loadedOperations; processingHistory = std::move(loadedHistory);variationSettings=loadedVariationSettings;variationHistory=std::move(loadedVariationHistory);
     error.clear(); return true;
 }
 
 bool ProjectManager::save(juce::String& error)
 {
     if (projectFile == juce::File()) { error = "Choose a project file with Save As first."; return false; }
-    auto* root = new juce::DynamicObject(); root->setProperty("schemaVersion", 2); root->setProperty("name", name);
+    auto* root = new juce::DynamicObject(); root->setProperty("schemaVersion", 3); root->setProperty("name", name);
     root->setProperty("selectedSampleId", selectedSampleId);
     juce::Array<juce::var> array;
     for (const auto& sample : samples) array.add(sample.toVar());
@@ -51,6 +53,7 @@ bool ProjectManager::save(juce::String& error)
     root->setProperty("processingChain", juce::var(chain));
     root->setProperty("processingHistory", processingHistory.toVar());
     root->setProperty("processingOperations", processingOperations.toVar());
+    root->setProperty("variationSettings",variationSettings.toVar());root->setProperty("variations",variationHistory.toVar());
     root->setProperty("exportSettings", juce::var(exportSettings));
     auto json = juce::JSON::toString(juce::var(root), true);
     if (!projectFile.getParentDirectory().createDirectory() || !projectFile.replaceWithText(json))
@@ -70,7 +73,7 @@ bool ProjectManager::rename(const juce::String& projectName)
 { if (projectName.trim().isEmpty()) return false; name = projectName.trim(); return true; }
 
 void ProjectManager::close()
-{ projectFile = {}; name = "Untitled Sample Pack"; openState = false; samples.clear(); selectedSampleId.clear(); exportSettings = new juce::DynamicObject(); processingChainSettings.clear(); processingOperations = {}; processingHistory.clear(); }
+{ projectFile = {}; name = "Untitled Sample Pack"; openState = false; samples.clear(); selectedSampleId.clear(); exportSettings = new juce::DynamicObject(); processingChainSettings.clear(); processingOperations = {}; processingHistory.clear();variationSettings={};variationHistory=VariationHistory{}; }
 
 juce::File ProjectManager::getAssetsDirectory() const
 { return projectFile.getSiblingFile(projectFile.getFileNameWithoutExtension() + "_assets"); }

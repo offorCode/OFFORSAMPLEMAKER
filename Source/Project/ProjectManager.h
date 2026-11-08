@@ -2,6 +2,8 @@
 #include <JuceHeader.h>
 #include "../Samples/SampleRecord.h"
 #include "../Processing/ProcessingHistory.h"
+#include "../Variations/VariationSettings.h"
+#include "../Variations/VariationHistory.h"
 
 class ProjectManager
 {
@@ -21,6 +23,8 @@ public:
     std::vector<EffectSettings> processingChainSettings;
     RenderOperations processingOperations;
     ProcessingHistory processingHistory;
+    VariationSettings variationSettings;
+    VariationHistory variationHistory;
     juce::File getAssetsDirectory() const;
 private:
     juce::File projectFile;

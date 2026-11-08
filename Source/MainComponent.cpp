@@ -72,9 +72,11 @@ MainComponent::MainComponent()
 
     addAndMakeVisible(processingPanel);
     processingPanel.setVisible(false);
+    addAndMakeVisible(variationPanel);
+    variationPanel.setVisible(false);
     processingPanel.setCallbacks(
         [this](const std::vector<EffectSettings>& effects)
-        { project.processingChainSettings = effects; if (project.isOpen()) updateProjectFromSamples(); },
+        { project.processingChainSettings = effects; if (project.isOpen()) updateProjectFromSamples();for(const auto&r:project.samples)if(r.path==selectedSample.getFullPathName()){variationPanel.setSource(selectedSample,r.id,r.category,project.getAssetsDirectory(),effects);break;} },
         [this](const ProcessingRecord& record)
         { if (project.isOpen()) { project.processingHistory.add(record); juce::String error; if (!project.save(error)) statusLabel.setText("Could not save processing history: " + error, juce::dontSendNotification); processingPanel.setHistory(project.processingHistory.all()); } },
         [this](const juce::File& file) { setPreviewFile(file); },
@@ -82,6 +84,11 @@ MainComponent::MainComponent()
     processingPanel.setChain(project.processingChainSettings);
     processingPanel.setOperations(project.processingOperations);
     processingPanel.setHistory(project.processingHistory.all());
+    variationPanel.setData(project.variationSettings,project.variationHistory.all());
+    variationPanel.setCallbacks(
+        [this](const VariationSettings& settings,const juce::Array<Variation>& records)
+        { project.variationSettings=settings;project.variationHistory.setAll(records);if(project.isOpen()){juce::String error;if(!project.save(error))statusLabel.setText("Could not save variations: "+error,juce::dontSendNotification);} },
+        [this](const juce::File& file){if(file==juce::File()){transport.stop();isPlaying=false;playButton.setButtonText("Play Preview");}else setPreviewFile(file);});
 
     sampleListModel = std::make_unique<SampleListModel>(*this);
     sampleList.setModel(sampleListModel.get());
@@ -103,7 +110,7 @@ MainComponent::MainComponent()
     categoryBox.onChange = [this]
     {
         for (auto& record : project.samples) if (record.path == selectedSample.getFullPathName())
-        { record.category = categoryBox.getText(); record.manuallyCategorized = true; break; }
+        { record.category = categoryBox.getText(); record.manuallyCategorized = true;variationPanel.setSource(selectedSample,record.id,record.category,project.isOpen()?project.getAssetsDirectory():juce::File(),project.processingChainSettings); break; }
         updateProjectFromSamples();
     };
     addAndMakeVisible(categoryBox);
@@ -416,6 +423,8 @@ void MainComponent::loadSample(const juce::File& file)
     juce::String sampleId;
     for (const auto& record : project.samples) if (record.path == file.getFullPathName()) { sampleId = record.id; break; }
     processingPanel.setSource(file, sampleId, project.isOpen() ? project.getAssetsDirectory() : juce::File());
+    juce::String selectedCategory;for(const auto& record:project.samples)if(record.id==sampleId){selectedCategory=record.category;break;}
+    variationPanel.setSource(file,sampleId,selectedCategory,project.isOpen()?project.getAssetsDirectory():juce::File(),project.processingChainSettings);
     if (!setPreviewFile(file))
     {
         statusLabel.setText(
@@ -499,9 +508,9 @@ void MainComponent::createProject()
         fileChooser->launchAsync(juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::canSelectFiles, [this, name](const juce::FileChooser& c)
         {
             auto f=c.getResult(); if (!f.getFileExtension().equalsIgnoreCase(".osfproj")) f=f.withFileExtension("osfproj");
-            if (!project.create(f,name)) { statusLabel.setText("Could not create project.",juce::dontSendNotification); return; }
+            variationPanel.cancelGeneration();if (!project.create(f,name)) { statusLabel.setText("Could not create project.",juce::dontSendNotification); return; }
             ++importGeneration; importPool.removeAllJobs(true,5000);
-            processingPanel.setChain(project.processingChainSettings);processingPanel.setOperations(project.processingOperations);processingPanel.setHistory(project.processingHistory.all());
+            processingPanel.setChain(project.processingChainSettings);processingPanel.setOperations(project.processingOperations);processingPanel.setHistory(project.processingHistory.all());variationPanel.setData(project.variationSettings,project.variationHistory.all());
             updateProjectFromSamples(); repaint();
         });
     }));
@@ -512,9 +521,9 @@ void MainComponent::openProject()
     fileChooser=std::make_unique<juce::FileChooser>("Open Sample Forge project",juce::File(),"*.osfproj");
     fileChooser->launchAsync(juce::FileBrowserComponent::openMode|juce::FileBrowserComponent::canSelectFiles,[this](const juce::FileChooser& c)
     {
-        juce::String error; if (!project.open(c.getResult(),error)) { statusLabel.setText(error,juce::dontSendNotification); return; }
+        variationPanel.cancelGeneration();juce::String error; if (!project.open(c.getResult(),error)) { statusLabel.setText(error,juce::dontSendNotification); return; }
         ++importGeneration; importPool.removeAllJobs(true,5000);
-        processingPanel.setChain(project.processingChainSettings);processingPanel.setOperations(project.processingOperations);processingPanel.setHistory(project.processingHistory.all());
+        processingPanel.setChain(project.processingChainSettings);processingPanel.setOperations(project.processingOperations);processingPanel.setHistory(project.processingHistory.all());variationPanel.setData(project.variationSettings,project.variationHistory.all());
         selectedSample = {};
         sampleFiles.clear(); for (const auto& r:project.samples) sampleFiles.add(juce::File(r.path));
         sampleListModel->refresh(sampleFiles,searchField.getText());
@@ -536,9 +545,10 @@ void MainComponent::saveProject(bool saveAs)
 
 void MainComponent::closeProject()
 {
+    variationPanel.cancelGeneration();
     ++importGeneration;
     importPool.removeAllJobs(true,5000); transport.stop(); transport.setSource(nullptr); selectedSample={}; sampleFiles.clear(); project.close();
-    thumbnail.clear(); sampleListModel->refresh(sampleFiles,{}); metadataLabel.setText({},juce::dontSendNotification); sampleCountLabel.setText("0 samples",juce::dontSendNotification); processingPanel.setChain({});processingPanel.setOperations({});processingPanel.setHistory({});processingPanel.setSource({}, {}, {}); statusLabel.setText("Project closed.",juce::dontSendNotification); repaint();
+    thumbnail.clear(); sampleListModel->refresh(sampleFiles,{}); metadataLabel.setText({},juce::dontSendNotification); sampleCountLabel.setText("0 samples",juce::dontSendNotification); processingPanel.setChain({});processingPanel.setOperations({});processingPanel.setHistory({});processingPanel.setSource({}, {}, {});variationPanel.setData({},{});variationPanel.setSource({}, {}, {}, {}, {}); statusLabel.setText("Project closed.",juce::dontSendNotification); repaint();
 }
 
 void MainComponent::renameProject()
@@ -562,8 +572,10 @@ void MainComponent::showPage(const juce::String& page)
 {
     currentPage = page;
     const bool processing = page == "Processing";
+    const bool variations = page == "Variations";
     processingPanel.setVisible(processing);
-    setDashboardControlsVisible(!processing);
+    variationPanel.setVisible(variations);
+    setDashboardControlsVisible(!processing&&!variations);
 
     pageTitle.setText(
         page,
@@ -629,7 +641,7 @@ void MainComponent::paint(juce::Graphics& g)
     g.drawText("SAMPLE FORGE", 76, 40, 145, 18,
                juce::Justification::left);
 
-    if (currentPage == "Processing") return;
+    if (currentPage == "Processing" || currentPage == "Variations") return;
 
     const int x = contentBounds.getX();
     const int y = contentBounds.getY();
@@ -761,6 +773,8 @@ void MainComponent::resized()
     };
     processingPanel.setBounds(contentBounds);
     processingPanel.setVisible(currentPage == "Processing");
+    variationPanel.setBounds(contentBounds);
+    variationPanel.setVisible(currentPage == "Variations");
 
     int navY = 112;
 
