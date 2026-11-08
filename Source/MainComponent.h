@@ -4,6 +4,7 @@
 #include <JuceHeader.h>
 #include "Project/ProjectManager.h"
 #include "Samples/SampleImporter.h"
+#include "Processing/ProcessingPanel.h"
 
 class MainComponent final : public juce::AudioAppComponent
 {
@@ -38,6 +39,8 @@ private:
     bool updateProjectFromSamples();
     void updateSampleDetails();
     void relinkMissingSample();
+    bool setPreviewFile(const juce::File& file);
+    void setDashboardControlsVisible(bool visible);
 
     juce::AudioFormatManager formatManager;
     juce::AudioTransportSource transport;
@@ -45,6 +48,7 @@ private:
     ProjectManager project;
     juce::AudioThumbnailCache thumbnailCache { 16 };
     juce::AudioThumbnail thumbnail { 512, formatManager, thumbnailCache };
+    ProcessingPanel processingPanel;
 
     std::unique_ptr<juce::AudioFormatReaderSource> currentReaderSource;
     std::unique_ptr<juce::FileChooser> fileChooser;

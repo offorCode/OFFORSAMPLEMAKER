@@ -1,6 +1,7 @@
 #pragma once
 #include <JuceHeader.h>
 #include "../Samples/SampleRecord.h"
+#include "../Processing/ProcessingHistory.h"
 
 class ProjectManager
 {
@@ -17,6 +18,9 @@ public:
     juce::Array<SampleRecord> samples;
     juce::String selectedSampleId;
     juce::DynamicObject::Ptr exportSettings { new juce::DynamicObject() };
+    std::vector<EffectSettings> processingChainSettings;
+    RenderOperations processingOperations;
+    ProcessingHistory processingHistory;
     juce::File getAssetsDirectory() const;
 private:
     juce::File projectFile;

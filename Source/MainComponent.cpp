@@ -70,6 +70,19 @@ MainComponent::MainComponent()
     setSize(1440, 900);
     setAudioChannels(0, 2);
 
+    addAndMakeVisible(processingPanel);
+    processingPanel.setVisible(false);
+    processingPanel.setCallbacks(
+        [this](const std::vector<EffectSettings>& effects)
+        { project.processingChainSettings = effects; if (project.isOpen()) updateProjectFromSamples(); },
+        [this](const ProcessingRecord& record)
+        { if (project.isOpen()) { project.processingHistory.add(record); juce::String error; if (!project.save(error)) statusLabel.setText("Could not save processing history: " + error, juce::dontSendNotification); processingPanel.setHistory(project.processingHistory.all()); } },
+        [this](const juce::File& file) { setPreviewFile(file); },
+        [this](const RenderOperations& operations) { project.processingOperations = operations; if (project.isOpen()) updateProjectFromSamples(); });
+    processingPanel.setChain(project.processingChainSettings);
+    processingPanel.setOperations(project.processingOperations);
+    processingPanel.setHistory(project.processingHistory.all());
+
     sampleListModel = std::make_unique<SampleListModel>(*this);
     sampleList.setModel(sampleListModel.get());
     sampleList.setRowHeight(29);
@@ -166,31 +179,25 @@ MainComponent::MainComponent()
     });
 
     auto addEffect = [this](juce::TextButton& button,
-                            const juce::String& name)
+                            const juce::String& name,
+                            EffectType type)
     {
-        createButton(button, name + "  OFF", lighterPanel,
-                     [this, &button, name]
+        createButton(button, name, lighterPanel,
+                     [this, name, type]
         {
-            const bool enabled = button.getToggleState();
-
-            button.setToggleState(
-                !enabled, juce::dontSendNotification);
-
-            button.setButtonText(
-                name + (enabled ? "  OFF" : "  ON"));
-
-            statusLabel.setText(
-                name + (enabled
-                    ? " disabled in interface."
-                    : " enabled in interface preview."),
-                juce::dontSendNotification);
+            auto effects = processingPanel.getChain();
+            effects.push_back(EffectSettings::defaults(type));
+            processingPanel.setChain(effects);
+            showPage("Processing");
+            if (project.isOpen()) { project.processingChainSettings = effects; updateProjectFromSamples(); }
+            statusLabel.setText(name + " added to the processing chain.", juce::dontSendNotification);
         });
     };
 
-    addEffect(eqButton, "EQ");
-    addEffect(compressorButton, "Compressor");
-    addEffect(distortionButton, "Distortion");
-    addEffect(reverbButton, "Reverb");
+    addEffect(eqButton, "EQ", EffectType::parametricEq);
+    addEffect(compressorButton, "Compressor", EffectType::compressor);
+    addEffect(distortionButton, "Saturation", EffectType::saturation);
+    addEffect(reverbButton, "Reverb", EffectType::reverb);
 
     for (int i = 0; i < 5; ++i)
     {
@@ -406,10 +413,10 @@ void MainComponent::chooseSampleFolder()
 void MainComponent::loadSample(const juce::File& file)
 {
     selectedSample = file;
-    std::unique_ptr<juce::AudioFormatReader> reader(
-        formatManager.createReaderFor(file));
-
-    if (reader == nullptr)
+    juce::String sampleId;
+    for (const auto& record : project.samples) if (record.path == file.getFullPathName()) { sampleId = record.id; break; }
+    processingPanel.setSource(file, sampleId, project.isOpen() ? project.getAssetsDirectory() : juce::File());
+    if (!setPreviewFile(file))
     {
         statusLabel.setText(
             (file.existsAsFile() ? "Could not decode: " : "Missing source — use Relink Missing: ") + file.getFileName(),
@@ -418,22 +425,7 @@ void MainComponent::loadSample(const juce::File& file)
         return;
     }
 
-    transport.stop();
-    transport.setSource(nullptr);
-
-    currentReaderSource =
-        std::make_unique<juce::AudioFormatReaderSource>(
-            reader.release(), true);
-
-    transport.setSource(
-        currentReaderSource.get(),
-        0,
-        nullptr,
-        currentReaderSource->getAudioFormatReader()->sampleRate);
-
-    selectedSample = file;
     relinkButton.setVisible(false);
-    thumbnail.setSource(new juce::FileInputSource(file));
 
     selectedSampleLabel.setText(
         file.getFileName(),
@@ -446,15 +438,31 @@ void MainComponent::loadSample(const juce::File& file)
     }
     updateSampleDetails();
     updateProjectFromSamples();
-
-    isPlaying = false;
-    playButton.setButtonText("Play Preview");
-
     statusLabel.setText(
         "Selected: " + file.getFileName(),
         juce::dontSendNotification);
 
     repaint();
+}
+
+bool MainComponent::setPreviewFile(const juce::File& file)
+{
+    std::unique_ptr<juce::AudioFormatReader> reader(formatManager.createReaderFor(file));
+    if (reader == nullptr) return false;
+    transport.stop(); transport.setSource(nullptr);
+    currentReaderSource = std::make_unique<juce::AudioFormatReaderSource>(reader.release(), true);
+    transport.setSource(currentReaderSource.get(), 0, nullptr, currentReaderSource->getAudioFormatReader()->sampleRate);
+    thumbnail.setSource(new juce::FileInputSource(file));
+    isPlaying = false; playButton.setButtonText("Play Preview"); repaint(); return true;
+}
+
+void MainComponent::setDashboardControlsVisible(bool visible)
+{
+    selectedSampleLabel.setVisible(visible); categoryBox.setVisible(visible); searchField.setVisible(visible); sampleList.setVisible(visible);
+    metadataLabel.setVisible(visible); playButton.setVisible(visible); stopButton.setVisible(visible); eqButton.setVisible(visible);
+    compressorButton.setVisible(visible); distortionButton.setVisible(visible); reverbButton.setVisible(visible);
+    for (auto& button : variationButtons) button.setVisible(visible);
+    lockButton.setVisible(visible); regenerateButton.setVisible(visible);
 }
 
 bool MainComponent::updateProjectFromSamples()
@@ -493,6 +501,7 @@ void MainComponent::createProject()
             auto f=c.getResult(); if (!f.getFileExtension().equalsIgnoreCase(".osfproj")) f=f.withFileExtension("osfproj");
             if (!project.create(f,name)) { statusLabel.setText("Could not create project.",juce::dontSendNotification); return; }
             ++importGeneration; importPool.removeAllJobs(true,5000);
+            processingPanel.setChain(project.processingChainSettings);processingPanel.setOperations(project.processingOperations);processingPanel.setHistory(project.processingHistory.all());
             updateProjectFromSamples(); repaint();
         });
     }));
@@ -505,6 +514,7 @@ void MainComponent::openProject()
     {
         juce::String error; if (!project.open(c.getResult(),error)) { statusLabel.setText(error,juce::dontSendNotification); return; }
         ++importGeneration; importPool.removeAllJobs(true,5000);
+        processingPanel.setChain(project.processingChainSettings);processingPanel.setOperations(project.processingOperations);processingPanel.setHistory(project.processingHistory.all());
         selectedSample = {};
         sampleFiles.clear(); for (const auto& r:project.samples) sampleFiles.add(juce::File(r.path));
         sampleListModel->refresh(sampleFiles,searchField.getText());
@@ -528,7 +538,7 @@ void MainComponent::closeProject()
 {
     ++importGeneration;
     importPool.removeAllJobs(true,5000); transport.stop(); transport.setSource(nullptr); selectedSample={}; sampleFiles.clear(); project.close();
-    thumbnail.clear(); sampleListModel->refresh(sampleFiles,{}); metadataLabel.setText({},juce::dontSendNotification); sampleCountLabel.setText("0 samples",juce::dontSendNotification); statusLabel.setText("Project closed.",juce::dontSendNotification); repaint();
+    thumbnail.clear(); sampleListModel->refresh(sampleFiles,{}); metadataLabel.setText({},juce::dontSendNotification); sampleCountLabel.setText("0 samples",juce::dontSendNotification); processingPanel.setChain({});processingPanel.setOperations({});processingPanel.setHistory({});processingPanel.setSource({}, {}, {}); statusLabel.setText("Project closed.",juce::dontSendNotification); repaint();
 }
 
 void MainComponent::renameProject()
@@ -551,6 +561,9 @@ void MainComponent::relinkMissingSample()
 void MainComponent::showPage(const juce::String& page)
 {
     currentPage = page;
+    const bool processing = page == "Processing";
+    processingPanel.setVisible(processing);
+    setDashboardControlsVisible(!processing);
 
     pageTitle.setText(
         page,
@@ -568,7 +581,7 @@ void MainComponent::showPage(const juce::String& page)
 
     else if (page == "Processing")
         pageSubtitle.setText(
-            "Choose the sound treatments you want to apply.",
+            "Build a real offline effect chain and render a non-destructive copy.",
             juce::dontSendNotification);
 
     else if (page == "Variations")
@@ -615,6 +628,8 @@ void MainComponent::paint(juce::Graphics& g)
     g.setColour(accentColour);
     g.drawText("SAMPLE FORGE", 76, 40, 145, 18,
                juce::Justification::left);
+
+    if (currentPage == "Processing") return;
 
     const int x = contentBounds.getX();
     const int y = contentBounds.getY();
@@ -744,6 +759,8 @@ void MainComponent::resized()
         getWidth() - sidebarWidth - 56,
         getHeight() - headerHeight - 48
     };
+    processingPanel.setBounds(contentBounds);
+    processingPanel.setVisible(currentPage == "Processing");
 
     int navY = 112;
 

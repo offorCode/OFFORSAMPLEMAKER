@@ -58,6 +58,21 @@ target_sources(OfforSampleForge
         Source/Project/ProjectManager.cpp
         Source/Classification/SampleClassifier.h
         Source/Classification/SampleClassifier.cpp
+        Source/Processing/EffectSettings.h
+        Source/Processing/EffectSettings.cpp
+        Source/Processing/AudioEffect.h
+        Source/Processing/BuiltInEffects.h
+        Source/Processing/BuiltInEffects.cpp
+        Source/Processing/EffectChain.h
+        Source/Processing/EffectChain.cpp
+        Source/Processing/EffectProcessor.h
+        Source/Processing/EffectProcessor.cpp
+        Source/Processing/ProcessingHistory.h
+        Source/Processing/ProcessingHistory.cpp
+        Source/Processing/AudioRenderJob.h
+        Source/Processing/AudioRenderJob.cpp
+        Source/Processing/ProcessingPanel.h
+        Source/Processing/ProcessingPanel.cpp
 )
 
 target_compile_features(OfforSampleForge PRIVATE cxx_std_17)
@@ -93,6 +108,12 @@ if(OFFOR_BUILD_STAGE2_TESTS)
         Source/Samples/AudioAnalyzer.cpp
         Source/Project/ProjectManager.cpp
         Source/Classification/SampleClassifier.cpp
+        Source/Processing/EffectSettings.cpp
+        Source/Processing/BuiltInEffects.cpp
+        Source/Processing/EffectChain.cpp
+        Source/Processing/EffectProcessor.cpp
+        Source/Processing/ProcessingHistory.cpp
+        Source/Processing/AudioRenderJob.cpp
     )
     target_compile_features(OfforStage2Tests PRIVATE cxx_std_17)
     target_compile_definitions(OfforStage2Tests PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 JUCE_REPORT_APP_USAGE=0 JUCE_MODAL_LOOPS_PERMITTED=1)
