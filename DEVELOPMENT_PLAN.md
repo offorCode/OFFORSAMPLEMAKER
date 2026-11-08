@@ -11,9 +11,9 @@ This plan is based on the existing JUCE 8.0.14 / C++17 standalone application an
 
 ## Stages
 
-1. **Library and preview foundation (current):** display imported samples in a selectable browser, show real decoded waveform data, and keep browsing/preview usable after imports. Preserve sources. Validate with the existing Release build.
-2. **Project persistence and sample metadata:** introduce project model/serialization, source references, file metadata, category overrides, search and persistent settings.
-3. **Audio analysis and classification:** background file analysis and transparent heuristic classifier with confidence/uncertain state; keep classifier modular for local ML later.
+1. **Library and preview foundation (complete):** selectable imported-sample browser and real decoded waveform; preserved from Stage 1.
+2. **Project persistence and sample metadata (foundation complete):** versioned JSON projects, source references, metadata, manual category overrides, selected sample, missing-source relink flow, and a background cancellable folder importer. Export settings have an empty versioned placeholder until export work.
+3. **Audio analysis and classification (foundation complete):** bounded feature extraction and a separate classifier interface. The current heuristic is deliberately provisional and low confidence; it is not a trained model.
 4. **Processing engine:** independent offline DSP chain with enable states, parameters, safe renders, and source preservation; then connect UI and preview.
 5. **Variations:** seeded controlled render jobs, unique output IDs, preview/history, locking, and regeneration that never replaces originals or locked outputs.
 6. **VST3 hosting and instrument rendering:** background scanning, safe effect hosting, plugin state, and a separate MIDI instrument render path.

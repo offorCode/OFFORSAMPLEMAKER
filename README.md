@@ -59,13 +59,23 @@ This target is a **standalone application that hosts VST3 plugins**. It is not i
 
 `JUCE_PLUGINHOST_VST3=1` enables JUCE's VST3 hosting classes at compile time. It does not yet implement plugin scanning, plugin loading, plugin UI, audio routing, offline rendering, or plugin-state persistence. Those are separate development tasks.
 
+## Stage 2 project and library foundation
+
+Projects use the versioned `.osfproj` JSON format and retain references to original audio paths. Generated assets belong in the adjacent `<project>_assets` directory; importing never copies or modifies source audio. Folder scans and metadata/feature extraction run on a worker thread, with duplicate-path filtering and progress/cancellation controls.
+
+The classifier interface is in `Source/Classification/`. Its current heuristic emits only a low-confidence provisional percussion cue; other samples remain uncertain. It is not a trained AI classifier.
+
+To run the Stage 2 regression checks, configure with `-DOFFOR_BUILD_STAGE2_TESTS=ON`, build `OfforStage2Tests`, and run `build/OfforStage2Tests_artefacts/Release/OfforStage2Tests.exe`. The checks cover decoded WAV features, background recursive import, unsupported/duplicate files, metadata, and project JSON round-trip.
+
 ## Planned source modules
 
-The next implementation stages will add:
+The remaining implementation stages will add:
 
 - `Core/` — project settings, paths, source permissions and naming templates
 - `Audio/` — decoding, analysis, DSP and rendering
-- `Classification/` — category detection and manual correction
+- `Classification/` — local model support beyond the current provisional baseline
+- `Project/` — project serialization, source references, and project-managed assets (foundation implemented)
+- `Samples/` — import, sample records, metadata, and analysis (foundation implemented)
 - `Plugins/` — VST3 scanner, plugin instances, state and routing
 - `Generation/` — synthesizer MIDI generation and offline instrument rendering
 - `Batch/` — variation jobs, seeds, locking and regeneration

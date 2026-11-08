@@ -29,6 +29,10 @@
 *.tlog/
 *.recipe
 
+# User-created project documents and generated project assets
+*.osfproj
+*_assets/
+
 # IDE metadata
 .vscode/
 .idea/

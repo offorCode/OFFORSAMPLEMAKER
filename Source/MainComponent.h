@@ -2,6 +2,8 @@
 #pragma once
 
 #include <JuceHeader.h>
+#include "Project/ProjectManager.h"
+#include "Samples/SampleImporter.h"
 
 class MainComponent final : public juce::AudioAppComponent
 {
@@ -28,9 +30,19 @@ private:
     void loadSample(const juce::File& file);
     juce::File getResourcesDirectory() const;
     void playStartupSound();
+    void createProject();
+    void openProject();
+    void saveProject(bool saveAs);
+    void closeProject();
+    void renameProject();
+    bool updateProjectFromSamples();
+    void updateSampleDetails();
+    void relinkMissingSample();
 
     juce::AudioFormatManager formatManager;
     juce::AudioTransportSource transport;
+    juce::ThreadPool importPool { 1 };
+    ProjectManager project;
     juce::AudioThumbnailCache thumbnailCache { 16 };
     juce::AudioThumbnail thumbnail { 512, formatManager, thumbnailCache };
 
@@ -63,6 +75,13 @@ private:
 
     juce::TextButton importButton;
     juce::TextButton exportTopButton;
+    juce::TextButton newProjectButton, openProjectButton, saveProjectButton, saveAsProjectButton, closeProjectButton, renameProjectButton;
+    juce::TextButton cancelImportButton, relinkButton;
+    juce::ComboBox categoryBox;
+    juce::Label metadataLabel;
+    double importProgressValue = 0.0;
+    juce::ProgressBar importProgress { importProgressValue };
+    juce::uint64 importGeneration = 0;
 
     juce::TextButton playButton;
     juce::TextButton stopButton;

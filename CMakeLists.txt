@@ -48,6 +48,16 @@ target_sources(OfforSampleForge
         Source/Main.cpp
         Source/MainComponent.cpp
         Source/MainComponent.h
+        Source/Samples/SampleRecord.h
+        Source/Samples/SampleRecord.cpp
+        Source/Samples/SampleImporter.h
+        Source/Samples/SampleImporter.cpp
+        Source/Samples/AudioAnalyzer.h
+        Source/Samples/AudioAnalyzer.cpp
+        Source/Project/ProjectManager.h
+        Source/Project/ProjectManager.cpp
+        Source/Classification/SampleClassifier.h
+        Source/Classification/SampleClassifier.cpp
 )
 
 target_compile_features(OfforSampleForge PRIVATE cxx_std_17)
@@ -71,6 +81,29 @@ target_link_libraries(OfforSampleForge
         juce::juce_recommended_config_flags
         juce::juce_recommended_warning_flags
 )
+
+option(OFFOR_BUILD_STAGE2_TESTS "Build Stage 2 persistence/import regression checks" OFF)
+if(OFFOR_BUILD_STAGE2_TESTS)
+    juce_add_console_app(OfforStage2Tests PRODUCT_NAME "OFFOR Stage 2 Tests")
+    juce_generate_juce_header(OfforStage2Tests)
+    target_sources(OfforStage2Tests PRIVATE
+        Tests/Stage2Tests.cpp
+        Source/Samples/SampleRecord.cpp
+        Source/Samples/SampleImporter.cpp
+        Source/Samples/AudioAnalyzer.cpp
+        Source/Project/ProjectManager.cpp
+        Source/Classification/SampleClassifier.cpp
+    )
+    target_compile_features(OfforStage2Tests PRIVATE cxx_std_17)
+    target_compile_definitions(OfforStage2Tests PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 JUCE_REPORT_APP_USAGE=0 JUCE_MODAL_LOOPS_PERMITTED=1)
+    target_link_libraries(OfforStage2Tests PRIVATE
+        juce::juce_audio_formats
+        juce::juce_dsp
+        juce::juce_gui_basics
+        juce::juce_recommended_config_flags
+        juce::juce_recommended_warning_flags
+    )
+endif()
 
 source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}/Source"
     PREFIX "Source"

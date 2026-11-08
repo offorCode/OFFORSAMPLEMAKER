@@ -34,7 +34,7 @@ public:
         for (const auto& file : files)
             if (query.isEmpty() || file.getFileName().containsIgnoreCase(query))
                 visibleFiles.add(file);
-        if (owner.selectedSample.existsAsFile())
+        if (owner.selectedSample != juce::File())
         {
             for (int i = 0; i < visibleFiles.size(); ++i)
                 if (visibleFiles[i] == owner.selectedSample) { owner.sampleList.selectRow(i); break; }
@@ -84,6 +84,37 @@ MainComponent::MainComponent()
         if (sampleListModel != nullptr) sampleListModel->refresh(sampleFiles, searchField.getText());
     };
     addAndMakeVisible(searchField);
+
+    for (const auto& category : { "Uncategorized", "Kick", "Snare", "Clap", "Hi-Hat", "Open Hi-Hat", "Closed Hi-Hat", "Percussion", "808", "Bass", "Melody", "Chord", "Pad", "Vocal", "Vocal Chop", "FX", "Riser", "Impact", "Texture", "Loop", "Other" })
+        categoryBox.addItem(category, categoryBox.getNumItems() + 1);
+    categoryBox.onChange = [this]
+    {
+        for (auto& record : project.samples) if (record.path == selectedSample.getFullPathName())
+        { record.category = categoryBox.getText(); record.manuallyCategorized = true; break; }
+        updateProjectFromSamples();
+    };
+    addAndMakeVisible(categoryBox);
+    metadataLabel.setColour(juce::Label::textColourId, mutedColour);
+    metadataLabel.setFont(juce::Font(11.0f));
+    addAndMakeVisible(metadataLabel);
+    createButton(newProjectButton, "New", lighterPanel, [this] { createProject(); });
+    createButton(openProjectButton, "Open", lighterPanel, [this] { openProject(); });
+    createButton(saveProjectButton, "Save", lighterPanel, [this] { saveProject(false); });
+    createButton(saveAsProjectButton, "Save As", lighterPanel, [this] { saveProject(true); });
+    createButton(closeProjectButton, "Close", lighterPanel, [this] { closeProject(); });
+    createButton(renameProjectButton, "Rename", lighterPanel, [this] { renameProject(); });
+    createButton(cancelImportButton, "Cancel Import", lighterPanel, [this]
+    {
+        ++importGeneration;
+        if (auto* job = importPool.getJob(0)) job->signalJobShouldExit();
+        importProgressValue = 0.0; cancelImportButton.setVisible(false);
+        statusLabel.setText("Import cancelled.", juce::dontSendNotification);
+    });
+    createButton(relinkButton, "Relink Missing", lighterPanel, [this] { relinkMissingSample(); });
+    addAndMakeVisible(importProgress);
+    importProgress.setColour(juce::ProgressBar::foregroundColourId, accentColour);
+    cancelImportButton.setVisible(false);
+    relinkButton.setVisible(false);
 
     auto addNav = [this](juce::TextButton& button,
                          const juce::String& name)
@@ -238,6 +269,8 @@ MainComponent::MainComponent()
 
 MainComponent::~MainComponent()
 {
+    ++importGeneration;
+    importPool.removeAllJobs(true, 5000);
     transport.stop();
     transport.setSource(nullptr);
     shutdownAudio();
@@ -343,68 +376,45 @@ void MainComponent::chooseSampleFolder()
             if (!folder.isDirectory())
                 return;
 
-            sampleFiles.clear();
-
-            juce::Array<juce::File> found;
-
-            folder.findChildFiles(
-                found,
-                juce::File::findFiles,
-                true);
-
-            for (const auto& file : found)
-            {
-                const auto ext =
-                    file.getFileExtension().toLowerCase();
-
-                if (ext == ".wav" ||
-                    ext == ".aif" ||
-                    ext == ".aiff" ||
-                    ext == ".mp3" ||
-                    ext == ".flac" ||
-                    ext == ".ogg")
+            importProgressValue = 0.0;
+            const auto generation = ++importGeneration;
+            cancelImportButton.setVisible(true);
+            statusLabel.setText("Scanning audio files in background...", juce::dontSendNotification);
+            juce::Component::SafePointer<MainComponent> safe(this);
+            auto* job = new SampleImporter(folder, project.samples,
+                [safe, folder, generation](juce::Array<SampleRecord> records, int unsupported, int added)
                 {
-                    sampleFiles.add(file);
-                }
-            }
-
-            sampleCountLabel.setText(
-                juce::String(sampleFiles.size()) +
-                " samples imported",
-                juce::dontSendNotification);
-
-            if (sampleListModel != nullptr)
-                sampleListModel->refresh(sampleFiles, searchField.getText());
-
-            if (sampleFiles.isEmpty())
-            {
-                statusLabel.setText(
-                    "No supported audio files found.",
-                    juce::dontSendNotification);
-            }
-            else
-            {
-                statusLabel.setText(
-                    "Imported from: " + folder.getFullPathName(),
-                    juce::dontSendNotification);
-
-                loadSample(sampleFiles.getFirst());
-            }
-
-            repaint();
+                    if (safe == nullptr || safe->importGeneration != generation) return;
+                    safe->project.samples = records;
+                    safe->sampleFiles.clear();
+                    for (const auto& record : records) safe->sampleFiles.add(juce::File(record.path));
+                    safe->cancelImportButton.setVisible(false); safe->importProgressValue = 1.0;
+                    safe->sampleCountLabel.setText(juce::String(records.size()) + " samples", juce::dontSendNotification);
+                    safe->sampleListModel->refresh(safe->sampleFiles, safe->searchField.getText());
+                    safe->statusLabel.setText("Added " + juce::String(added) + ", skipped " + juce::String(unsupported) + " unsupported; source: " + folder.getFileName(), juce::dontSendNotification);
+                    safe->updateProjectFromSamples();
+                    if (!safe->sampleFiles.isEmpty() && !safe->selectedSample.existsAsFile()) safe->loadSample(safe->sampleFiles.getFirst());
+                    safe->repaint();
+                }, [safe, generation](double progress)
+                {
+                    if (safe != nullptr && safe->importGeneration == generation) { safe->importProgressValue = progress; safe->repaint(); }
+                });
+            importPool.addJob(job, true);
         });
 }
 
 void MainComponent::loadSample(const juce::File& file)
 {
+    selectedSample = file;
     std::unique_ptr<juce::AudioFormatReader> reader(
         formatManager.createReaderFor(file));
 
     if (reader == nullptr)
     {
         statusLabel.setText(
-            "Could not open: " + file.getFileName(),
+            (file.existsAsFile() ? "Could not decode: " : "Missing source — use Relink Missing: ") + file.getFileName(),
             juce::dontSendNotification);
+        relinkButton.setVisible(!file.existsAsFile());
         return;
     }
 
@@ -422,11 +432,20 @@ void MainComponent::loadSample(const juce::File& file)
         currentReaderSource->getAudioFormatReader()->sampleRate);
 
     selectedSample = file;
+    relinkButton.setVisible(false);
     thumbnail.setSource(new juce::FileInputSource(file));
 
     selectedSampleLabel.setText(
         file.getFileName(),
         juce::dontSendNotification);
+    for (const auto& record : project.samples) if (record.path == file.getFullPathName())
+    {
+        for (int i=0;i<categoryBox.getNumItems();++i) if(categoryBox.getItemText(i)==record.category) { categoryBox.setSelectedId(categoryBox.getItemId(i),juce::dontSendNotification); break; }
+        if (!file.existsAsFile()) relinkButton.setVisible(true);
+        break;
+    }
+    updateSampleDetails();
+    updateProjectFromSamples();
 
     isPlaying = false;
     playButton.setButtonText("Play Preview");
@@ -436,6 +455,97 @@ void MainComponent::loadSample(const juce::File& file)
         juce::dontSendNotification);
 
     repaint();
+}
+
+bool MainComponent::updateProjectFromSamples()
+{
+    if (!project.isOpen()) return false;
+    const juce::File current(selectedSample);
+    for (auto& record : project.samples) if (current.existsAsFile() && record.path == current.getFullPathName()) project.selectedSampleId = record.id;
+    juce::String error; if (!project.save(error)) { statusLabel.setText("Project save failed: " + error, juce::dontSendNotification); return false; }
+    repaint();
+    return true;
+}
+
+void MainComponent::updateSampleDetails()
+{
+    for (const auto& r : project.samples) if (r.path == selectedSample.getFullPathName())
+    {
+        metadataLabel.setTooltip(r.path);
+        metadataLabel.setText(juce::String(r.durationSeconds, 2) + " s   " + juce::String((int)r.sampleRate) + " Hz   " + juce::String(r.bitDepth) + " bit   " + juce::String(r.channels) + " ch   " + juce::String(r.fileSize / 1024) + " KB   " + r.format + "   " + r.features.classificationStatus + " " + juce::String(r.features.confidence * 100.0, 0) + "%", juce::dontSendNotification);
+        return;
+    }
+    metadataLabel.setText("Metadata is available after importing into a project.", juce::dontSendNotification);
+    metadataLabel.setTooltip(selectedSample.getFullPathName());
+}
+
+void MainComponent::createProject()
+{
+    auto dialog = std::make_shared<juce::AlertWindow>("New Project", "Choose a project name", juce::AlertWindow::NoIcon);
+    dialog->addTextEditor("name", "Untitled Sample Pack"); dialog->addButton("Choose Location...", 1); dialog->addButton("Cancel", 0);
+    dialog->enterModalState(true, juce::ModalCallbackFunction::create([this, dialog](int result)
+    {
+        if (result != 1) return;
+        const auto name = dialog->getTextEditorContents("name");
+        fileChooser = std::make_unique<juce::FileChooser>("Create project", juce::File::getSpecialLocation(juce::File::userDocumentsDirectory), "*.osfproj");
+        fileChooser->launchAsync(juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::canSelectFiles, [this, name](const juce::FileChooser& c)
+        {
+            auto f=c.getResult(); if (!f.getFileExtension().equalsIgnoreCase(".osfproj")) f=f.withFileExtension("osfproj");
+            if (!project.create(f,name)) { statusLabel.setText("Could not create project.",juce::dontSendNotification); return; }
+            ++importGeneration; importPool.removeAllJobs(true,5000);
+            updateProjectFromSamples(); repaint();
+        });
+    }));
+}
+
+void MainComponent::openProject()
+{
+    fileChooser=std::make_unique<juce::FileChooser>("Open Sample Forge project",juce::File(),"*.osfproj");
+    fileChooser->launchAsync(juce::FileBrowserComponent::openMode|juce::FileBrowserComponent::canSelectFiles,[this](const juce::FileChooser& c)
+    {
+        juce::String error; if (!project.open(c.getResult(),error)) { statusLabel.setText(error,juce::dontSendNotification); return; }
+        ++importGeneration; importPool.removeAllJobs(true,5000);
+        selectedSample = {};
+        sampleFiles.clear(); for (const auto& r:project.samples) sampleFiles.add(juce::File(r.path));
+        sampleListModel->refresh(sampleFiles,searchField.getText());
+        if (!project.selectedSampleId.isEmpty()) for (const auto& r:project.samples) if (r.id==project.selectedSampleId) { selectedSample=juce::File(r.path); break; }
+        if (selectedSample == juce::File() && !sampleFiles.isEmpty()) selectedSample=sampleFiles.getFirst();
+        if (selectedSample != juce::File()) loadSample(selectedSample);
+        relinkButton.setVisible(std::any_of(project.samples.begin(),project.samples.end(),[](const SampleRecord& r){return !juce::File(r.path).existsAsFile();}));
+        sampleCountLabel.setText(juce::String(project.samples.size())+" samples",juce::dontSendNotification); repaint();
+    });
+}
+
+void MainComponent::saveProject(bool saveAs)
+{
+    if (project.isOpen() && !saveAs) { if (updateProjectFromSamples()) statusLabel.setText("Project saved.",juce::dontSendNotification); return; }
+    fileChooser=std::make_unique<juce::FileChooser>("Save Sample Forge project",juce::File::getSpecialLocation(juce::File::userDocumentsDirectory).getChildFile(project.getName()+".osfproj"),"*.osfproj");
+    fileChooser->launchAsync(juce::FileBrowserComponent::saveMode|juce::FileBrowserComponent::canSelectFiles,[this](const juce::FileChooser& c)
+    { auto f=c.getResult(); if(!f.getFileExtension().equalsIgnoreCase(".osfproj")) f=f.withFileExtension("osfproj"); juce::String error; if(!project.saveAs(f,error)) statusLabel.setText(error,juce::dontSendNotification); else updateProjectFromSamples(); repaint(); });
+}
+
+void MainComponent::closeProject()
+{
+    ++importGeneration;
+    importPool.removeAllJobs(true,5000); transport.stop(); transport.setSource(nullptr); selectedSample={}; sampleFiles.clear(); project.close();
+    thumbnail.clear(); sampleListModel->refresh(sampleFiles,{}); metadataLabel.setText({},juce::dontSendNotification); sampleCountLabel.setText("0 samples",juce::dontSendNotification); statusLabel.setText("Project closed.",juce::dontSendNotification); repaint();
+}
+
+void MainComponent::renameProject()
+{
+    if (!project.isOpen()) { statusLabel.setText("Open a project before renaming it.",juce::dontSendNotification); return; }
+    auto dialog=std::make_shared<juce::AlertWindow>("Rename Project","Enter the new project name",juce::AlertWindow::NoIcon);
+    dialog->addTextEditor("name",project.getName());dialog->addButton("Rename",1);dialog->addButton("Cancel",0);
+    dialog->enterModalState(true,juce::ModalCallbackFunction::create([this,dialog](int result)
+    { if(result!=1)return; if(!project.rename(dialog->getTextEditorContents("name"))){statusLabel.setText("Project name cannot be empty.",juce::dontSendNotification);return;} updateProjectFromSamples(); statusLabel.setText("Project renamed and saved.",juce::dontSendNotification); repaint(); }));
+}
+
+void MainComponent::relinkMissingSample()
+{
+    if (selectedSample == juce::File()) { statusLabel.setText("Select a missing sample in the project first.",juce::dontSendNotification); return; }
+    fileChooser=std::make_unique<juce::FileChooser>("Relink missing sample",juce::File(),"*.wav;*.aif;*.aiff;*.mp3;*.flac;*.ogg");
+    fileChooser->launchAsync(juce::FileBrowserComponent::openMode|juce::FileBrowserComponent::canSelectFiles,[this](const juce::FileChooser& c)
+    { auto f=c.getResult(); if(!f.existsAsFile())return; for(auto& r:project.samples) if(r.path==selectedSample.getFullPathName()){r.path=f.getFullPathName();r.fileSize=f.getSize();r.format=f.getFileExtension().trimCharactersAtStart(".").toUpperCase();} selectedSample=f; sampleFiles.clear();for(const auto& r:project.samples)sampleFiles.add(juce::File(r.path));sampleListModel->refresh(sampleFiles,searchField.getText());loadSample(f);relinkButton.setVisible(false);updateProjectFromSamples(); });
 }
 
 void MainComponent::showPage(const juce::String& page)
@@ -593,7 +703,7 @@ void MainComponent::paint(juce::Graphics& g)
         juce::Justification::left);
 
     g.drawText(
-        "Untitled Sample Pack",
+        project.isOpen() ? project.getName() : "Untitled Sample Pack",
         overview.getX() + cardW + 40, cardY + 21,
         cardW - 20, 22,
         juce::Justification::left);
@@ -653,6 +763,14 @@ void MainComponent::resized()
     }
 
     importButton.setBounds(sidebarWidth + 28, 22, 140, 38);
+    newProjectButton.setBounds(sidebarWidth + 180, 22, 54, 38);
+    openProjectButton.setBounds(sidebarWidth + 238, 22, 54, 38);
+    saveProjectButton.setBounds(sidebarWidth + 296, 22, 54, 38);
+    saveAsProjectButton.setBounds(sidebarWidth + 354, 22, 62, 38);
+    renameProjectButton.setBounds(sidebarWidth + 420, 22, 64, 38);
+    closeProjectButton.setBounds(sidebarWidth + 488, 22, 58, 38);
+    importProgress.setBounds(sidebarWidth + 554, 29, 100, 20);
+    cancelImportButton.setBounds(sidebarWidth + 660, 22, 104, 38);
     exportTopButton.setBounds(getWidth() - 174, 22, 146, 38);
 
     pageTitle.setBounds(
@@ -670,10 +788,12 @@ void MainComponent::resized()
     const int panelX = contentBounds.getX();
 
     selectedSampleLabel.setBounds(
-        panelX + 18, panelY + 43, panelW - 36, 24);
+        panelX + 18, panelY + 43, panelW - 222, 24);
+    categoryBox.setBounds(panelX + panelW - 194, panelY + 43, 176, 26);
 
     searchField.setBounds(panelX + 18, panelY + 68, panelW - 36, 28);
     sampleList.setBounds(panelX + 18, panelY + 100, panelW - 36, 86);
+    metadataLabel.setBounds(panelX + 18, panelY + 188, panelW - 36, 18);
     waveformBounds = { panelX + 18, panelY + 190, panelW - 36, 78 };
 
     playButton.setBounds(
