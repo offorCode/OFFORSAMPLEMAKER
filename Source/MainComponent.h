@@ -6,6 +6,8 @@
 #include "Samples/SampleImporter.h"
 #include "Processing/ProcessingPanel.h"
 #include "Variations/VariationPanel.h"
+#include "UI/OfforLookAndFeel.h"
+#include "Plugins/PluginPanel.h"
 
 class MainComponent final : public juce::AudioAppComponent
 {
@@ -42,6 +44,7 @@ private:
     void relinkMissingSample();
     bool setPreviewFile(const juce::File& file);
     void setDashboardControlsVisible(bool visible);
+    void updateProjectHeading();
 
     juce::AudioFormatManager formatManager;
     juce::AudioTransportSource transport;
@@ -49,7 +52,7 @@ private:
     ProjectManager project;
     juce::AudioThumbnailCache thumbnailCache { 16 };
     juce::AudioThumbnail thumbnail { 512, formatManager, thumbnailCache };
-    ProcessingPanel processingPanel;
+    ProcessingPanel processingPanel { formatManager, thumbnailCache };
     VariationPanel variationPanel { formatManager, thumbnailCache };
 
     std::unique_ptr<juce::AudioFormatReaderSource> currentReaderSource;
@@ -63,6 +66,9 @@ private:
 
     juce::Array<juce::File> sampleFiles;
     juce::File selectedSample;
+    std::unique_ptr<juce::PropertiesFile> userSettings;
+    std::unique_ptr<PluginPanel> pluginPanel;
+    OfforLookAndFeel offorLookAndFeel;
 
     juce::String currentPage = "Home";
 
@@ -71,6 +77,7 @@ private:
     juce::Label selectedSampleLabel;
     juce::Label sampleCountLabel;
     juce::Label statusLabel;
+    juce::Label projectHeading;
 
     juce::TextButton homeButton;
     juce::TextButton libraryButton;
@@ -78,12 +85,17 @@ private:
     juce::TextButton variationsButton;
     juce::TextButton pluginsButton;
     juce::TextButton exportButton;
+    juce::TextButton settingsButton;
+    juce::ToggleButton startupAudioToggle;
+    juce::TextButton homeImportButton,homeNewButton,homeOpenButton;
+    juce::TextButton exportVariationsButton;
 
     juce::TextButton importButton;
     juce::TextButton exportTopButton;
     juce::TextButton newProjectButton, openProjectButton, saveProjectButton, saveAsProjectButton, closeProjectButton, renameProjectButton;
     juce::TextButton cancelImportButton, relinkButton;
     juce::ComboBox categoryBox;
+    juce::ComboBox categoryFilterBox;
     juce::Label metadataLabel;
     double importProgressValue = 0.0;
     juce::ProgressBar importProgress { importProgressValue };

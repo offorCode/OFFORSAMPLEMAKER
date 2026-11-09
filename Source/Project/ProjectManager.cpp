@@ -3,7 +3,7 @@
 bool ProjectManager::create(const juce::File& file, const juce::String& projectName)
 {
     if (projectName.trim().isEmpty() || !file.getParentDirectory().createDirectory()) return false;
-    projectFile = file; name = projectName.trim(); samples.clear(); selectedSampleId.clear(); processingChainSettings.clear(); processingOperations = {}; processingHistory.clear(); variationSettings={};variationHistory=VariationHistory{};
+    projectFile = file; name = projectName.trim(); samples.clear(); selectedSampleId.clear(); processingChainSettings.clear(); processingOperations = {}; processingHistory.clear(); variationSettings={};variationHistory=VariationHistory{};pluginCatalogXml.clear();
     openState = true;
     exportSettings = new juce::DynamicObject();
     if (!getAssetsDirectory().createDirectory()) return false;
@@ -15,7 +15,7 @@ bool ProjectManager::open(const juce::File& file, juce::String& error)
     auto parsed = juce::JSON::parse(file);
     auto* root = parsed.getDynamicObject();
     const int schema = root == nullptr ? 0 : (int)root->getProperty("schemaVersion");
-    if (root == nullptr || (schema < 1 || schema > 3))
+    if (root == nullptr || (schema < 1 || schema > 4))
     { error = "Invalid project file or unsupported schema version."; return false; }
     juce::Array<SampleRecord> loaded;
     auto list = root->getProperty("samples");
@@ -38,13 +38,14 @@ bool ProjectManager::open(const juce::File& file, juce::String& error)
     openState = true; samples = loaded; selectedSampleId = root->getProperty("selectedSampleId").toString();
     if (auto* settings = root->getProperty("exportSettings").getDynamicObject()) exportSettings = settings; else exportSettings = new juce::DynamicObject();
     processingChainSettings = std::move(loadedChain); processingOperations = loadedOperations; processingHistory = std::move(loadedHistory);variationSettings=loadedVariationSettings;variationHistory=std::move(loadedVariationHistory);
+    pluginCatalogXml = root->getProperty("pluginCatalogXml").toString();
     error.clear(); return true;
 }
 
 bool ProjectManager::save(juce::String& error)
 {
     if (projectFile == juce::File()) { error = "Choose a project file with Save As first."; return false; }
-    auto* root = new juce::DynamicObject(); root->setProperty("schemaVersion", 3); root->setProperty("name", name);
+    auto* root = new juce::DynamicObject(); root->setProperty("schemaVersion", 4); root->setProperty("name", name);
     root->setProperty("selectedSampleId", selectedSampleId);
     juce::Array<juce::var> array;
     for (const auto& sample : samples) array.add(sample.toVar());
@@ -55,6 +56,7 @@ bool ProjectManager::save(juce::String& error)
     root->setProperty("processingOperations", processingOperations.toVar());
     root->setProperty("variationSettings",variationSettings.toVar());root->setProperty("variations",variationHistory.toVar());
     root->setProperty("exportSettings", juce::var(exportSettings));
+    root->setProperty("pluginCatalogXml", pluginCatalogXml);
     auto json = juce::JSON::toString(juce::var(root), true);
     if (!projectFile.getParentDirectory().createDirectory() || !projectFile.replaceWithText(json))
     { error = "Could not write project file."; return false; }
@@ -73,7 +75,7 @@ bool ProjectManager::rename(const juce::String& projectName)
 { if (projectName.trim().isEmpty()) return false; name = projectName.trim(); return true; }
 
 void ProjectManager::close()
-{ projectFile = {}; name = "Untitled Sample Pack"; openState = false; samples.clear(); selectedSampleId.clear(); exportSettings = new juce::DynamicObject(); processingChainSettings.clear(); processingOperations = {}; processingHistory.clear();variationSettings={};variationHistory=VariationHistory{}; }
+{ projectFile = {}; name = "Untitled Sample Pack"; openState = false; samples.clear(); selectedSampleId.clear(); exportSettings = new juce::DynamicObject(); processingChainSettings.clear(); processingOperations = {}; processingHistory.clear();variationSettings={};variationHistory=VariationHistory{};pluginCatalogXml.clear(); }
 
 juce::File ProjectManager::getAssetsDirectory() const
 { return projectFile.getSiblingFile(projectFile.getFileNameWithoutExtension() + "_assets"); }

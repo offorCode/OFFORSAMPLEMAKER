@@ -20,6 +20,7 @@ public:
     juce::Array<SampleRecord> samples;
     juce::String selectedSampleId;
     juce::DynamicObject::Ptr exportSettings { new juce::DynamicObject() };
+    juce::String pluginCatalogXml;
     std::vector<EffectSettings> processingChainSettings;
     RenderOperations processingOperations;
     ProcessingHistory processingHistory;

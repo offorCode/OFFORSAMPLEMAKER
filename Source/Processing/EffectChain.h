@@ -12,6 +12,8 @@ public:
     void clear();
     void prepare(double sampleRate,int maxBlockSize,int channels);
     void process(juce::AudioBuffer<float>&);
+    // A safety ceiling applied after the user chain for offline file output.
+    void processWithOutputCeiling(juce::AudioBuffer<float>&, float ceiling = 0.98f);
     void reset();
     juce::var toVar() const;
     bool fromVar(const juce::var&);

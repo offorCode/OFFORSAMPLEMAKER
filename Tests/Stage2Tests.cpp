@@ -6,6 +6,7 @@
 #include "../Source/Processing/EffectProcessor.h"
 #include "../Source/Processing/AudioRenderJob.h"
 #include "../Source/Variations/VariationRenderer.h"
+#include "../Source/Variations/VariationExporter.h"
 #include "../Source/Variations/VariationLockManager.h"
 #include <iostream>
 
@@ -24,6 +25,11 @@ namespace
         juce::AudioBuffer<float> eq(1,n);for(int i=0;i<n;++i)eq.setSample(0,i,.15f*std::sin(2*juce::MathConstants<float>::pi*100*i/(float)sr)+.15f*std::sin(2*juce::MathConstants<float>::pi*1000*i/(float)sr));
         const auto before=toneAmplitude(eq,1000,sr);auto s=EffectSettings::defaults(EffectType::parametricEq);s.frequency=1000;s.gainDb=12;EffectProcessor::processBuffer(eq,sr,{s});require(toneAmplitude(eq,1000,sr)>before*2.5,"EQ failed to boost its target frequency");
 
+        juce::AudioBuffer<float> eqInput(1,n);for(int i=0;i<n;++i)eqInput.setSample(0,i,.15f*std::sin(2*juce::MathConstants<float>::pi*1000*i/(float)sr)+.15f*std::sin(2*juce::MathConstants<float>::pi*3000*i/(float)sr));
+        juce::AudioBuffer<float> eqCut(1,n);eqCut.copyFrom(0,0,eqInput,0,0,n);s=EffectSettings::defaults(EffectType::parametricEq);s.frequency=1000;s.gainDb=-12;EffectProcessor::processBuffer(eqCut,sr,{s});require(toneAmplitude(eqCut,1000,sr)<toneAmplitude(eqInput,1000,sr)*.4,"EQ cut failed at its selected frequency");
+        juce::AudioBuffer<float> eqAt1k(1,n),eqAt3k(1,n);eqAt1k.copyFrom(0,0,eqInput,0,0,n);eqAt3k.copyFrom(0,0,eqInput,0,0,n);s=EffectSettings::defaults(EffectType::parametricEq);s.frequency=1000;s.gainDb=12;EffectProcessor::processBuffer(eqAt1k,sr,{s});s.frequency=3000;EffectProcessor::processBuffer(eqAt3k,sr,{s});require(toneAmplitude(eqAt1k,1000,sr)>toneAmplitude(eqAt3k,1000,sr)*1.8&&toneAmplitude(eqAt3k,3000,sr)>toneAmplitude(eqAt1k,3000,sr)*1.8,"EQ frequency setting did not move the affected band");
+        juce::AudioBuffer<float> eqWide(1,n),eqNarrow(1,n);eqWide.copyFrom(0,0,eqInput,0,0,n);eqNarrow.copyFrom(0,0,eqInput,0,0,n);s=EffectSettings::defaults(EffectType::parametricEq);s.frequency=1000;s.gainDb=12;s.q=.2f;EffectProcessor::processBuffer(eqWide,sr,{s});s.q=12;EffectProcessor::processBuffer(eqNarrow,sr,{s});require(std::abs(toneAmplitude(eqWide,3000,sr)-toneAmplitude(eqNarrow,3000,sr))>.01,"EQ Q setting did not change bandwidth behavior");
+
         juce::AudioBuffer<float> comp(1,n);for(int i=0;i<n;++i)comp.setSample(0,i,(i<n/2?.15f:.8f)*std::sin(2*juce::MathConstants<float>::pi*220*i/(float)sr));
         const auto ratioBefore=(double)comp.getMagnitude(0,n/2,n/2)/std::max(1.0e-6,(double)comp.getMagnitude(0,0,n/2));s=EffectSettings::defaults(EffectType::compressor);s.thresholdDb=-18;s.ratio=8;s.attackMs=1;s.releaseMs=10;EffectProcessor::processBuffer(comp,sr,{s});const auto ratioAfter=(double)comp.getMagnitude(0,n/2,n/2)/std::max(1.0e-6,(double)comp.getMagnitude(0,0,n/2));require(ratioAfter<ratioBefore*.55,"Compressor failed to reduce dynamic range");
 
@@ -31,6 +37,7 @@ namespace
 
         juce::AudioBuffer<float> delay(1,8192);delay.clear();delay.setSample(0,0,1);s=EffectSettings::defaults(EffectType::delay);s.delayMs=50;s.feedback=.3f;EffectProcessor::processBuffer(delay,sr,{s});require(std::abs(delay.getSample(0,2205))>.1f,"Delay did not produce a delayed impulse");
         juce::AudioBuffer<float> reverb(1,65536);reverb.clear();reverb.setSample(0,0,1);s=EffectSettings::defaults(EffectType::reverb);EffectProcessor::processBuffer(reverb,sr,{s});double tail=0;for(int i=8000;i<reverb.getNumSamples();++i)tail+=std::abs(reverb.getSample(0,i));require(tail>0.01,"Reverb produced no measurable tail");
+        juce::AudioBuffer<float> dryReverb(1,65536),wetReverb(1,65536),halfReverb(1,65536);for(auto*b:{&dryReverb,&wetReverb,&halfReverb}){b->clear();b->setSample(0,0,1);}s=EffectSettings::defaults(EffectType::reverb);s.wet=0;EffectProcessor::processBuffer(dryReverb,sr,{s});s.wet=1;EffectProcessor::processBuffer(wetReverb,sr,{s});s.wet=.5f;EffectProcessor::processBuffer(halfReverb,sr,{s});double dryDiff=0,wetTail=0,halfTail=0;for(int i=0;i<dryReverb.getNumSamples();++i){dryDiff+=std::abs(dryReverb.getSample(0,i)-(i==0?1.0f:0.0f));if(i>8000){wetTail+=std::abs(wetReverb.getSample(0,i));halfTail+=std::abs(halfReverb.getSample(0,i));}}require(dryDiff<1e-6&&wetTail>0.01&&halfTail>0.001&&halfTail<wetTail,"Reverb wet/dry blend did not match its control");
 
         juce::AudioBuffer<float> gain(1,8);gain.clear();gain.setSample(0,0,.25f);s=EffectSettings::defaults(EffectType::gain);s.levelDb=6;EffectProcessor::processBuffer(gain,sr,{s});require(std::abs(gain.getSample(0,0)-.25f*juce::Decibels::decibelsToGain(6.0f))<1e-5,"Gain amplitude is incorrect");
         juce::AudioBuffer<float> bypass(1,16);for(int i=0;i<16;++i)bypass.setSample(0,i,.03f*i);juce::AudioBuffer<float> bypassCopy(1,16);bypassCopy.copyFrom(0,0,bypass,0,0,16);s=EffectSettings::defaults(EffectType::gain);s.levelDb=18;s.enabled=false;EffectProcessor::processBuffer(bypass,sr,{s});require(bypass.getMagnitude(0,0,16)==bypassCopy.getMagnitude(0,0,16),"Disabled effect altered its input");
@@ -98,6 +105,12 @@ namespace
         auto sourceFolder = root.getChildFile("sources"); sourceFolder.createDirectory();
         auto wave = makeWav(sourceFolder);
         auto generatedVariations=runVariationChecks(root,wave,"sample-test-id");
+        juce::Array<juce::File> variationFiles;for(const auto&v:generatedVariations)variationFiles.add(juce::File(v.outputPath));
+        const auto exportDir=root.getChildFile("wav_export");require(exportDir.createDirectory(),"Could not create WAV export fixture directory");int exportedCount=0;juce::String exportError;
+        require(VariationExporter::copyWavs(variationFiles,exportDir,exportedCount,exportError)&&exportedCount==5,"Selected WAV export failed: "+exportError);
+        int repeatedCount=0;require(VariationExporter::copyWavs(variationFiles,exportDir,repeatedCount,exportError)&&repeatedCount==5&&exportDir.findChildFiles(juce::File::findFiles,false,"*.wav").size()==10,"WAV export overwrote existing files");
+        juce::File zipCreated;const auto zipRequested=root.getChildFile("sample_pack.zip");require(VariationExporter::createZip(variationFiles,zipRequested,zipCreated,exportError)&&zipCreated.existsAsFile(),"ZIP variation export failed: "+exportError);
+        std::unique_ptr<juce::InputStream> zipStream(zipCreated.createInputStream());require(zipStream!=nullptr,"ZIP export could not be reopened");juce::ZipFile zipReader(*zipStream);require(zipReader.getNumEntries()==5,"ZIP export did not contain all five WAVs");
 
         sourceFolder.getChildFile("unsupported.txt").replaceWithText("not audio");
 
@@ -151,6 +164,17 @@ namespace
         std::unique_ptr<juce::AudioFormatReader> renderedReader(fm.createReaderFor(rendered));require(renderedReader&&renderedReader->lengthInSamples>=44100,"Rendered WAV could not be reopened");
         juce::AudioBuffer<float> renderCheck(1,4096);renderCheck.clear();require(renderedReader->read(&renderCheck,0,4096,0,true,true),"Could not decode rendered output");double renderedPeak=0;for(int i=0;i<4096;++i)renderedPeak=juce::jmax(renderedPeak,(double)std::abs(renderCheck.getSample(0,i)));require(renderedPeak>0.2,"Rendered gain output is silent or unchanged");
         renderPool.removeJob(renderJob,false,1000);delete renderJob;
+        auto renderFile6=root.getChildFile("renders/gain_render_6db.wav");bool render6Done=false;juce::File rendered6;juce::String render6Error;auto renderGain6=EffectSettings::defaults(EffectType::gain);renderGain6.levelDb=6.0f;
+        auto*renderJob6=new AudioRenderJob(wave,renderFile6,imported[0].id,{renderGain6},[&](juce::File result,const juce::String&error){rendered6=result;render6Error=error;render6Done=true;},[](double){});renderPool.addJob(renderJob6,false);const auto render6Deadline=juce::Time::getMillisecondCounter()+10000;while(!render6Done&&juce::Time::getMillisecondCounter()<render6Deadline)juce::MessageManager::getInstance()->runDispatchLoopUntil(20);require(render6Done&&render6Error.isEmpty()&&rendered6.existsAsFile(),"Updated chain settings did not produce a render: "+render6Error);std::unique_ptr<juce::AudioFormatReader>reader6(fm.createReaderFor(rendered6));require(reader6&&reader6->lengthInSamples>=44100,"Updated render could not be reopened");juce::AudioBuffer<float>check6(1,44100);check6.clear();require(reader6->read(&check6,0,44100,0,true,true),"Could not decode updated render");const double newRms=check6.getRMSLevel(0,0,4096);const double oldRms=renderCheck.getRMSLevel(0,0,4096);require(newRms>oldRms*1.1,"New gain parameter values were not used by the next render");require(check6.getMagnitude(0,0,44100)<=0.981,"Offline render exceeded its output safety ceiling");renderPool.removeJob(renderJob6,false,1000);delete renderJob6;
+
+        const std::array<EffectType,8> renderTypes{{EffectType::parametricEq,EffectType::compressor,EffectType::saturation,EffectType::reverb,EffectType::delay,EffectType::filter,EffectType::gain,EffectType::limiter}};
+        for(size_t ei=0;ei<renderTypes.size();++ei)
+        {
+            auto setting=EffectSettings::defaults(renderTypes[ei]);setting.wet=1.0f;
+            switch(setting.type){case EffectType::parametricEq:setting.frequency=120;setting.gainDb=9;setting.q=1.4f;break;case EffectType::compressor:setting.thresholdDb=-30;setting.ratio=8;setting.attackMs=1;setting.releaseMs=40;break;case EffectType::saturation:setting.driveDb=22;break;case EffectType::reverb:setting.roomSize=.8f;setting.wet=.7f;break;case EffectType::delay:setting.delayMs=25;setting.feedback=.5f;break;case EffectType::filter:setting.cutoffHz=500;setting.highPass=false;break;case EffectType::gain:setting.levelDb=6;break;case EffectType::limiter:setting.ceilingDb=-12;break;}
+            auto inputCheck=std::unique_ptr<juce::AudioFormatReader>(fm.createReaderFor(wave));juce::AudioBuffer<float> inputAudio(1,44100);require(inputCheck&&inputCheck->read(&inputAudio,0,44100,0,true,true),"Could not read source for effect render check");juce::AudioBuffer<float>bypassAudio(1,44100);bypassAudio.makeCopyOf(inputAudio);setting.enabled=false;EffectProcessor::processBuffer(bypassAudio,44100.0,{setting});double bypassDelta=0;for(int i=0;i<44100;++i)bypassDelta+=std::abs(bypassAudio.getSample(0,i)-inputAudio.getSample(0,i));require(bypassDelta==0,"Effect bypass changed the source buffer: "+setting.typeName());setting.enabled=true;
+            const auto target=root.getChildFile("renders/effect_"+juce::String((int)ei)+".wav");bool effectDone=false;juce::String effectError;juce::File effectOutput;auto*effectJob=new AudioRenderJob(wave,target,imported[0].id,{setting},[&](juce::File f,const juce::String&e){effectOutput=f;effectError=e;effectDone=true;},[](double){});renderPool.addJob(effectJob,false);const auto effectDeadline=juce::Time::getMillisecondCounter()+10000;while(!effectDone&&juce::Time::getMillisecondCounter()<effectDeadline)juce::MessageManager::getInstance()->runDispatchLoopUntil(20);require(effectDone&&effectError.isEmpty()&&effectOutput.existsAsFile(),"Effect render failed: "+setting.typeName()+" "+effectError);std::unique_ptr<juce::AudioFormatReader>effectReader(fm.createReaderFor(effectOutput));juce::AudioBuffer<float> renderedAudio(1,44100);renderedAudio.clear();require(effectReader&&effectReader->read(&renderedAudio,0,44100,0,true,true),"Rendered effect audio could not be decoded: "+setting.typeName());double delta=0;for(int i=0;i<44100;++i)delta+=std::abs(renderedAudio.getSample(0,i)-inputAudio.getSample(0,i));require(delta>.01&&renderedAudio.getMagnitude(0,0,44100)>0.001&&renderedAudio.getMagnitude(0,0,44100)<=.981,"Effect output was unchanged, silent, or clipped: "+setting.typeName());renderPool.removeJob(effectJob,false,1000);delete effectJob;
+        }
 
         auto projectFile = root.getChildFile("Demo.osfproj");
 
@@ -159,7 +183,7 @@ namespace
         imported.getReference(0).category = "Bass"; imported.getReference(0).manuallyCategorized = true;
         project.samples = imported; project.selectedSampleId = imported[0].id;
         auto gainSetting=EffectSettings::defaults(EffectType::gain);gainSetting.levelDb=6.0f;project.processingChainSettings={gainSetting};project.processingOperations.reverse=true;project.processingOperations.fadeInMs=5.0;
-        project.variationSettings.seed=19770511;project.variationHistory.setAll(generatedVariations);Variation missingVariation=generatedVariations[0];missingVariation.outputPath=root.getChildFile("not_found.wav").getFullPathName();project.variationHistory.add(missingVariation);
+        project.variationSettings.seed=19770511;project.variationHistory.setAll(generatedVariations);Variation missingVariation=generatedVariations[0];missingVariation.outputPath=root.getChildFile("not_found.wav").getFullPathName();project.variationHistory.add(missingVariation);project.pluginCatalogXml="<KNOWNPLUGINS><PLUGIN name=\"Example\"/></KNOWNPLUGINS>";
         project.exportSettings->setProperty("format", "FLAC");
         ProcessingRecord history;history.sampleId=imported[0].id;history.originalPath=wave.getFullPathName();history.renderedPath=rendered.getFullPathName();history.effects={renderGain};history.timestamp=juce::Time::getCurrentTime().toISO8601(true);project.processingHistory.add(history);
         juce::String error; require(project.save(error), "Project save failed: " + error);
@@ -172,12 +196,13 @@ namespace
         require(reopened.processingChainSettings.size()==1&&std::abs(reopened.processingChainSettings[0].levelDb-6.0f)<1e-5&&reopened.processingHistory.all().size()==1,"Processing settings/history did not persist");
         require(reopened.processingOperations.reverse&&std::abs(reopened.processingOperations.fadeInMs-5.0)<1e-6,"Audio operation settings did not persist");
         require(reopened.exportSettings->getProperty("format").toString()=="FLAC","Export settings did not persist");
+        require(reopened.pluginCatalogXml==project.pluginCatalogXml,"Plugin scan catalog did not persist");
         require(reopened.variationHistory.all().size()==6&&reopened.variationSettings.seed==19770511,"Variation project data did not persist");
 
         require(reopened.rename("Renamed Pack")&&reopened.save(error),"Project rename/save failed");auto saveAsFile=root.getChildFile("Copied.osfproj");require(reopened.saveAs(saveAsFile,error),"Project Save As failed: "+error);ProjectManager saveAsReopened;require(saveAsReopened.open(saveAsFile,error)&&saveAsReopened.getName()=="Renamed Pack"&&saveAsReopened.processingHistory.all().size()==1,"Save As data round-trip failed");
         auto legacyFile=root.getChildFile("Legacy.osfproj");auto* legacy=new juce::DynamicObject();juce::var legacyVar(legacy);legacy->setProperty("schemaVersion",1);legacy->setProperty("name","Legacy");legacy->setProperty("selectedSampleId",imported[0].id);juce::Array<juce::var> legacySamples;legacySamples.add(imported[0].toVar());legacy->setProperty("samples",juce::var(legacySamples));legacyFile.replaceWithText(juce::JSON::toString(legacyVar,true));ProjectManager legacyProject;require(legacyProject.open(legacyFile,error)&&legacyProject.samples.size()==1&&legacyProject.processingChainSettings.empty()&&!legacyProject.processingOperations.any(),"Stage 1 schema compatibility failed");legacy->setProperty("schemaVersion",2);auto stage3File=root.getChildFile("Stage3.osfproj");stage3File.replaceWithText(juce::JSON::toString(legacyVar,true));ProjectManager stage3Project;require(stage3Project.open(stage3File,error)&&stage3Project.samples.size()==1,"Stage 3 schema compatibility failed");
         require(reopened.selectedSampleId == imported[0].id && wave.existsAsFile(), "Selection or original file was not preserved");
-        std::cout << "Stage 4 tests passed: prior DSP/import/persistence regressions, five rendered variations, diversity, lock protection, regeneration, cancellation and variation project round-trip.\n";
+        std::cout << "Regression tests passed: Stage 1-4 import/classification/persistence and deterministic DSP; offline render + bypass comparisons for all 8 built-in effects; five varied renders; lock protection; regeneration; cancellation; WAV collision safety; ZIP reopen with 5 entries; project round-trip.\n";
         root.deleteRecursively();
     }
 }

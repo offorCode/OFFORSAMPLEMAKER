@@ -29,7 +29,7 @@ juce::ThreadPoolJob::JobStatus AudioRenderJob::runJob()
         if(operations.fadeOutMs>0)AudioOperations::fadeOut(buffer,reader->sampleRate,operations.fadeOutMs);
         juce::AudioBuffer<float> processBlock((int)reader->numChannels,block);
         const auto totalFrames=buffer.getNumSamples();
-        for(juce::int64 offset=0;offset<totalFrames;offset+=block){if(isCancelled()){failed=true;break;}const int n=(int)juce::jmin<juce::int64>(block,totalFrames-offset);processBlock.setSize((int)reader->numChannels,n,false,false,true);for(int c=0;c<processBlock.getNumChannels();++c)processBlock.copyFrom(c,0,buffer,c,(int)offset,n);chain.process(processBlock);for(int c=0;c<processBlock.getNumChannels();++c)buffer.copyFrom(c,(int)offset,processBlock,c,0,n);if(progress){auto cb=progress;const double v=0.65*(double)(offset+n)/(double)totalFrames;juce::MessageManager::callAsync([cb,v]{cb(v);});}}
+        for(juce::int64 offset=0;offset<totalFrames;offset+=block){if(isCancelled()){failed=true;break;}const int n=(int)juce::jmin<juce::int64>(block,totalFrames-offset);processBlock.setSize((int)reader->numChannels,n,false,false,true);for(int c=0;c<processBlock.getNumChannels();++c)processBlock.copyFrom(c,0,buffer,c,(int)offset,n);chain.processWithOutputCeiling(processBlock);for(int c=0;c<processBlock.getNumChannels();++c)buffer.copyFrom(c,(int)offset,processBlock,c,0,n);if(progress){auto cb=progress;const double v=0.65*(double)(offset+n)/(double)totalFrames;juce::MessageManager::callAsync([cb,v]{cb(v);});}}
         if(failed){writer.reset();destinationFile.deleteFile();finish("Render cancelled.");return jobHasFinished;}
         if(operations.normalize)AudioOperations::normalize(buffer,operations.normalizeTargetDb,operations.normalizeCeilingDb);
         renderLength=buffer.getNumSamples();
@@ -39,7 +39,7 @@ juce::ThreadPoolJob::JobStatus AudioRenderJob::runJob()
     {
         if(isCancelled()){failed=true;break;}const int n=(int)juce::jmin<juce::int64>(block,reader->lengthInSamples-pos);buffer.clear();
         buffer.setSize((int)reader->numChannels,n,false,false,true);
-        if(!reader->read(&buffer,0,n,pos,true,true)){failed=true;break;}chain.process(buffer);
+        if(!reader->read(&buffer,0,n,pos,true,true)){failed=true;break;}chain.processWithOutputCeiling(buffer);
         if(!writer->writeFromAudioSampleBuffer(buffer,0,n)){failed=true;break;}pos+=n;
         if(progress&&((pos/block)%8==0||pos>=reader->lengthInSamples)){auto cb=progress;const double v=(double)pos/(double)reader->lengthInSamples;juce::MessageManager::callAsync([cb,v]{cb(v);});}
     }

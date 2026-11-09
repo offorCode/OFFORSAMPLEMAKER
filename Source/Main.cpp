@@ -52,8 +52,11 @@ private:
         {
             setUsingNativeTitleBar(true);
             setContentOwned(new MainComponent(), true);
-            centreWithSize(1180, 760);
+            auto icon=juce::ImageFileFormat::loadFrom(juce::File(juce::File::getSpecialLocation(juce::File::currentExecutableFile).getParentDirectory().getChildFile("Resources/OfforSForge.png")));
+            if(icon.isValid())setIcon(icon);
+            centreWithSize(1240, 700);
             setResizable(true, true);
+            setResizeLimits(1040,680,2600,1800);
             setVisible(true);
         }
 

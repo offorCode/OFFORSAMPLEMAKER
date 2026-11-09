@@ -85,8 +85,21 @@ target_sources(OfforSampleForge
         Source/Variations/VariationLockManager.cpp
         Source/Variations/VariationRenderer.h
         Source/Variations/VariationRenderer.cpp
+        Source/Variations/VariationExporter.h
+        Source/Variations/VariationExporter.cpp
         Source/Variations/VariationPanel.h
         Source/Variations/VariationPanel.cpp
+        Source/UI/OfforLookAndFeel.h
+        Source/UI/OfforLookAndFeel.cpp
+        Source/Plugins/PluginScanJob.h
+        Source/Plugins/PluginScanJob.cpp
+        Source/Plugins/PluginPanel.h
+        Source/Plugins/PluginPanel.cpp
+)
+
+set_target_properties(OfforSampleForge PROPERTIES
+    JUCE_ICON_BIG "${CMAKE_CURRENT_SOURCE_DIR}/Resources/OfforSForge.png"
+    JUCE_ICON_SMALL "${CMAKE_CURRENT_SOURCE_DIR}/Resources/OfforSForge.ico"
 )
 
 target_compile_features(OfforSampleForge PRIVATE cxx_std_17)
@@ -134,6 +147,7 @@ if(OFFOR_BUILD_STAGE2_TESTS)
         Source/Variations/VariationHistory.cpp
         Source/Variations/VariationLockManager.cpp
         Source/Variations/VariationRenderer.cpp
+        Source/Variations/VariationExporter.cpp
     )
     target_compile_features(OfforStage2Tests PRIVATE cxx_std_17)
     target_compile_definitions(OfforStage2Tests PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 JUCE_REPORT_APP_USAGE=0 JUCE_MODAL_LOOPS_PERMITTED=1)
