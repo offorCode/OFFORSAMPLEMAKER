@@ -14,6 +14,7 @@ public:
     void setCatalog(const juce::String&);
 private:
     int getNumRows() override;
+    juce::String getTooltipForRow(int) override;
     void paintListBoxItem(int, juce::Graphics&, int, int, bool) override;
     void refreshRows();
     void addCustomDirectory();
@@ -28,7 +29,7 @@ private:
     bool scanning = false;
     double progressValue = 0.0;
     juce::TextEditor search;
-    juce::ComboBox formatFilter, manufacturerFilter;
+    juce::ComboBox formatFilter, typeFilter, manufacturerFilter;
     juce::TextButton scanButton, addDirectoryButton, cancelButton;
     juce::ListBox results { "Installed VST3 plugins", this };
     juce::ProgressBar progress { progressValue };

@@ -11,15 +11,18 @@ PluginPanel::PluginPanel(juce::PropertiesFile& p, CatalogChanged changed)
     : preferences(p), onCatalogChanged(std::move(changed))
 {
     search.setTextToShowWhenEmpty("Search installed plugins...", muted);
+    search.setTooltip("Search discovered VST3 plugin names, manufacturers, and categories.");
     search.onTextChange = [this] { refreshRows(); };
     addAndMakeVisible(search);
     formatFilter.addItem("All formats", 1); formatFilter.addItem("VST3", 2); formatFilter.addItem("VST2 unavailable", 3);
-    formatFilter.setSelectedId(1); formatFilter.onChange = [this] { refreshRows(); }; addAndMakeVisible(formatFilter);
+    formatFilter.setSelectedId(1); formatFilter.setTooltip("Filter the discovery list by plugin format. VST2 is not hosted by this build.");formatFilter.onChange = [this] { refreshRows(); }; addAndMakeVisible(formatFilter);
+    typeFilter.addItem("All types",1);typeFilter.addItem("Effects",2);typeFilter.addItem("Instruments",3);typeFilter.setSelectedId(1);typeFilter.setTooltip("Filter discovered descriptions by effect or instrument category.");typeFilter.onChange=[this]{refreshRows();};addAndMakeVisible(typeFilter);
     manufacturerFilter.addItem("All manufacturers", 1); manufacturerFilter.setSelectedId(1);
-    manufacturerFilter.onChange = [this] { refreshRows(); }; addAndMakeVisible(manufacturerFilter);
+    manufacturerFilter.setTooltip("Show discovered plugins from one manufacturer.");manufacturerFilter.onChange = [this] { refreshRows(); }; addAndMakeVisible(manufacturerFilter);
     scanButton.setButtonText("Rescan VST3"); scanButton.onClick = [this] { scan(true); }; addAndMakeVisible(scanButton);
     addDirectoryButton.setButtonText("Add Plugin Folder"); addDirectoryButton.onClick = [this] { addCustomDirectory(); }; addAndMakeVisible(addDirectoryButton);
     cancelButton.setButtonText("Cancel Scan"); cancelButton.onClick = [this] { cancelScan(); }; addAndMakeVisible(cancelButton);
+    scanButton.setTooltip("Rescan configured VST3 plugin folders in the background.");addDirectoryButton.setTooltip("Add a custom folder to VST3 discovery.");cancelButton.setTooltip("Request cancellation of the active plugin scan.");
     OfforLookAndFeel::setIcon(scanButton,"regenerate");OfforLookAndFeel::setIcon(addDirectoryButton,"open");OfforLookAndFeel::setIcon(cancelButton,"stop");
     addAndMakeVisible(results); addAndMakeVisible(progress); addAndMakeVisible(status);
     status.setColour(juce::Label::textColourId, muted);
@@ -124,6 +127,9 @@ void PluginPanel::refreshRows()
             && !p.category.containsIgnoreCase(query)) continue;
         if (formatFilter.getSelectedId() == 2 && !p.pluginFormatName.containsIgnoreCase("VST3")) continue;
         if (formatFilter.getSelectedId() == 3) continue;
+        const bool instrument=p.category.containsIgnoreCase("instrument")||p.category.containsIgnoreCase("synth");
+        if(typeFilter.getSelectedId()==2&&instrument)continue;
+        if(typeFilter.getSelectedId()==3&&!instrument)continue;
         if (manufacturerFilter.getSelectedId() > 1
             && manufacturerFilter.getText() != p.manufacturerName) continue;
         visible.add(p);
@@ -133,30 +139,39 @@ void PluginPanel::refreshRows()
 
 int PluginPanel::getNumRows() { return visible.size(); }
 
+juce::String PluginPanel::getTooltipForRow(int row)
+{
+    if(!juce::isPositiveAndBelow(row,visible.size()))return {};
+    const auto&p=visible.getReference(row);const bool instrument=p.category.containsIgnoreCase("instrument")||p.category.containsIgnoreCase("synth");
+    return p.name+" — "+p.manufacturerName+" | "+(instrument?"Instrument":"Effect")+" | "+p.pluginFormatName+" "+p.version+" | DISCOVERED (not loaded or validated for hosting)";
+}
+
 void PluginPanel::paintListBoxItem(int row, juce::Graphics& g, int width, int height, bool selected)
 {
     if (!juce::isPositiveAndBelow(row, visible.size())) return;
     const auto& p = visible.getReference(row); g.fillAll(selected ? juce::Colour(0xff392218) : panel);
-    g.setColour(text); g.setFont(13.0f); g.drawText(p.name, 12, 2, width * 42 / 100, height - 4, juce::Justification::centredLeft, true);
-    g.setColour(muted); g.setFont(11.0f); g.drawText(p.manufacturerName, width * 43 / 100, 2, width * 20 / 100, height - 4, juce::Justification::centredLeft, true);
-    g.drawText(p.category, width * 64 / 100, 2, width * 17 / 100, height - 4, juce::Justification::centredLeft, true);
-    g.setColour(accent); g.drawText("VST3", width - 74, 2, 62, height - 4, juce::Justification::centredRight);
+    const bool instrument=p.category.containsIgnoreCase("instrument")||p.category.containsIgnoreCase("synth");
+    g.setColour(text); g.setFont(13.0f); g.drawText(p.name, 12, 2, width * 32 / 100, height - 4, juce::Justification::centredLeft, true);
+    g.setColour(muted); g.setFont(11.0f); g.drawText(p.manufacturerName, width * 33 / 100, 2, width * 19 / 100, height - 4, juce::Justification::centredLeft, true);
+    g.drawText(instrument?"Instrument":"Effect", width * 53 / 100, 2, width * 13 / 100, height - 4, juce::Justification::centredLeft, true);
+    g.drawText(p.category, width * 67 / 100, 2, width * 15 / 100, height - 4, juce::Justification::centredLeft, true);
+    g.setColour(accent); g.drawText("VST3 · Discovered", width * 82 / 100, 2, width * 18 / 100 - 12, height - 4, juce::Justification::centredRight);
 }
 
 void PluginPanel::paint(juce::Graphics& g)
 {
     g.fillAll(background); auto area = getLocalBounds().reduced(12); g.setColour(panel); g.fillRoundedRectangle(area.toFloat(), 10);
     g.setColour(border); g.drawRoundedRectangle(area.toFloat(), 10, 1);
-    g.setColour(text); g.setFont(juce::Font(16.0f, juce::Font::bold)); g.drawText("Installed VST3 plugins", 24, 18, 360, 26, juce::Justification::left);
-    g.setColour(muted); g.setFont(12.0f); g.drawText("Scans known Windows VST3 folders and custom directories. Scan runs in the background.", 24, 47, getWidth()-48, 20, juce::Justification::left);
-    g.drawText("VST2 folders are not loaded or labeled as plugins: this build has no VST2 host/SDK enabled.", 24, getHeight()-62, getWidth()-48, 18, juce::Justification::left);
+    g.setColour(text); g.setFont(juce::Font(16.0f, juce::Font::bold)); g.drawText("VST3 Plugin Discovery", 24, 18, 360, 26, juce::Justification::left);
+    g.setColour(muted); g.setFont(12.0f); g.drawText("DISCOVERED means a plugin description was found. This build does not validate, load, or process with plugins.", 24, 47, getWidth()-48, 20, juce::Justification::left);
+    g.drawText("VST2 is unsupported here. VST3 hosting status: NOT IMPLEMENTED.", 24, getHeight()-62, getWidth()-48, 18, juce::Justification::left);
     if (visible.isEmpty() && !scanning) { g.setColour(muted); g.drawText("No valid VST3 plugins found yet.", 24, 104, getWidth()-48, 36, juce::Justification::centred); }
 }
 
 void PluginPanel::resized()
 {
-    const int x=24,y=78,w=getWidth()-48; search.setBounds(x,y,juce::jmax(150,w-620),30);
-    formatFilter.setBounds(x+juce::jmax(150,w-620)+8,y,150,30); manufacturerFilter.setBounds(x+juce::jmax(150,w-620)+166,y,175,30);
-    scanButton.setBounds(getWidth()-348,y,105,30); addDirectoryButton.setBounds(getWidth()-235,y,130,30); cancelButton.setBounds(getWidth()-96,y,72,30);
-    results.setBounds(x,y+42,w,getHeight()-180); results.setRowHeight(32); progress.setBounds(x,getHeight()-124,w,20); status.setBounds(x,getHeight()-100,w,20);
+    const int x=24,y=78,w=getWidth()-48;const int searchW=juce::jmax(155,w-676);search.setBounds(x,y,searchW,30);
+    int fx=x+searchW+8;formatFilter.setBounds(fx,y,130,30);fx+=138;typeFilter.setBounds(fx,y,120,30);fx+=128;manufacturerFilter.setBounds(fx,y,juce::jmax(120,juce::jmin(170,getWidth()-fx-24)),30);
+    const int buttonsY=y+38;scanButton.setBounds(getWidth()-348,buttonsY,105,30);addDirectoryButton.setBounds(getWidth()-235,buttonsY,130,30);cancelButton.setBounds(getWidth()-96,buttonsY,72,30);
+    results.setBounds(x,y+78,w,getHeight()-216); results.setRowHeight(36); progress.setBounds(x,getHeight()-124,w,20); status.setBounds(x,getHeight()-100,w,20);
 }

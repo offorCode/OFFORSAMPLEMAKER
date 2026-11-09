@@ -9,7 +9,7 @@
 #include "UI/OfforLookAndFeel.h"
 #include "Plugins/PluginPanel.h"
 
-class MainComponent final : public juce::AudioAppComponent
+class MainComponent final : public juce::AudioAppComponent, private juce::KeyListener
 {
     class SampleListModel;
 public:
@@ -45,6 +45,8 @@ private:
     bool setPreviewFile(const juce::File& file);
     void setDashboardControlsVisible(bool visible);
     void updateProjectHeading();
+    bool keyPressed(const juce::KeyPress&, juce::Component*) override;
+    void togglePreviewPlayback();
 
     juce::AudioFormatManager formatManager;
     juce::AudioTransportSource transport;
@@ -69,6 +71,7 @@ private:
     std::unique_ptr<juce::PropertiesFile> userSettings;
     std::unique_ptr<PluginPanel> pluginPanel;
     OfforLookAndFeel offorLookAndFeel;
+    juce::TooltipWindow tooltipWindow { this, 500 };
 
     juce::String currentPage = "Home";
 
@@ -78,6 +81,7 @@ private:
     juce::Label sampleCountLabel;
     juce::Label statusLabel;
     juce::Label projectHeading;
+    juce::Label audioStatusLabel;
 
     juce::TextButton homeButton;
     juce::TextButton libraryButton;
@@ -89,6 +93,7 @@ private:
     juce::ToggleButton startupAudioToggle;
     juce::TextButton homeImportButton,homeNewButton,homeOpenButton;
     juce::TextButton exportVariationsButton;
+    juce::TextButton helpButton;
 
     juce::TextButton importButton;
     juce::TextButton exportTopButton;
@@ -118,6 +123,7 @@ private:
     juce::Rectangle<int> waveformBounds;
 
     bool isPlaying = false;
+    double outputSampleRate = 0.0;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MainComponent)
 };

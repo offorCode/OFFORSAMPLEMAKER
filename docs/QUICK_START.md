@@ -13,3 +13,13 @@
 **Plugin note:** The **VST3 Plugins** page discovers installed VST3 metadata. This build does not load plugins or process audio through them. VST2 hosting and full source-sample pack export are unavailable.
 
 
+
+## Keyboard controls and Quick Help
+
+- **Ctrl+S** saves the current project.
+- **Ctrl+O** opens a project.
+- **Space** pauses or resumes the current audio preview.
+- **Delete** requests confirmation before deleting selected unlocked variations.
+- The **?** header button opens Quick Help. Hover over controls for further explanations.
+
+Plugin scan results are labeled **Discovered**. This build does not load plugins, so a discovered name is not a hosted effect or instrument.

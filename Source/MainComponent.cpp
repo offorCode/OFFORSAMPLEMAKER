@@ -66,6 +66,8 @@ namespace
 MainComponent::MainComponent()
 {
     setLookAndFeel(&offorLookAndFeel);
+    setWantsKeyboardFocus(true);
+    addKeyListener(this);
     formatManager.registerBasicFormats();
     juce::PropertiesFile::Options settingsOptions;
     settingsOptions.applicationName = "OFFOR SAMPLE FORGE";
@@ -73,6 +75,7 @@ MainComponent::MainComponent()
     settingsOptions.folderName = "OFFOR AUDIO";
     settingsOptions.osxLibrarySubFolder = "Application Support";
     userSettings = std::make_unique<juce::PropertiesFile>(settingsOptions);
+    tooltipWindow.setLookAndFeel(&offorLookAndFeel);
     pluginPanel = std::make_unique<PluginPanel>(*userSettings, [this](const juce::String& xml)
     {
         if (!project.isOpen()) return;
@@ -107,7 +110,7 @@ MainComponent::MainComponent()
     variationPanel.setCallbacks(
         [this](const VariationSettings& settings,const juce::Array<Variation>& records)
         { project.variationSettings=settings;project.variationHistory.setAll(records);if(project.isOpen()){juce::String error;if(!project.save(error))statusLabel.setText("Could not save variations: "+error,juce::dontSendNotification);} },
-        [this](const juce::File& file){if(file==juce::File()){transport.stop();isPlaying=false;playButton.setButtonText("Play Preview");}else setPreviewFile(file);});
+        [this](const juce::File& file){if(file==juce::File()){transport.stop();isPlaying=false;playButton.setButtonText("Play Preview");}else if(setPreviewFile(file)){transport.start();isPlaying=true;playButton.setButtonText("Playing Preview");}});
 
     sampleListModel = std::make_unique<SampleListModel>(*this);
     sampleList.setModel(sampleListModel.get());
@@ -144,6 +147,12 @@ MainComponent::MainComponent()
     createButton(saveAsProjectButton, "Save As", lighterPanel, [this] { saveProject(true); });
     createButton(closeProjectButton, "Close", lighterPanel, [this] { closeProject(); });
     createButton(renameProjectButton, "Rename", lighterPanel, [this] { renameProject(); });
+    newProjectButton.setTooltip("Create a new sample project and its managed asset folder.");
+    openProjectButton.setTooltip("Open an existing OFFOR SAMPLE FORGE project (.osfproj).");
+    saveProjectButton.setTooltip("Save the current project, sample categories and audio settings.");
+    saveAsProjectButton.setTooltip("Save a copy of the current project under a new file name.");
+    closeProjectButton.setTooltip("Close the current project and return to the dashboard.");
+    renameProjectButton.setTooltip("Change the name shown for the current project.");
     OfforLookAndFeel::setIcon(openProjectButton,"open");OfforLookAndFeel::setIcon(saveProjectButton,"save");OfforLookAndFeel::setIcon(saveAsProjectButton,"save");OfforLookAndFeel::setIcon(importButton,"import");OfforLookAndFeel::setIcon(exportTopButton,"export");
     createButton(cancelImportButton, "Cancel Import", lighterPanel, [this]
     {
@@ -152,7 +161,10 @@ MainComponent::MainComponent()
         importProgressValue = 0.0; cancelImportButton.setVisible(false);
         statusLabel.setText("Import cancelled.", juce::dontSendNotification);
     });
+    cancelImportButton.setButtonText("");OfforLookAndFeel::setIcon(cancelImportButton,"stop");cancelImportButton.setTooltip("Cancel the active folder import.");
     createButton(relinkButton, "Relink Missing", lighterPanel, [this] { relinkMissingSample(); });
+    cancelImportButton.setTooltip("Stop the current background folder import.");
+    relinkButton.setTooltip("Choose a replacement file for a missing source sample.");
     addAndMakeVisible(importProgress);
     importProgress.setColour(juce::ProgressBar::foregroundColourId, accentColour);
     cancelImportButton.setVisible(false);
@@ -190,23 +202,12 @@ MainComponent::MainComponent()
 
     createButton(exportTopButton, "Export Pack", accentColour,
                  [this] { showPage("Export"); });
+    importButton.setTooltip("Scan a folder recursively and import supported audio files.");
+    exportTopButton.setTooltip("Open the export workspace for variation WAV and ZIP exports.");
+    createButton(helpButton,"",lighterPanel,[this]{juce::AlertWindow::showMessageBoxAsync(juce::AlertWindow::InfoIcon,"OFFOR SAMPLE FORGE Quick Help","Hover over controls for parameter guidance. Start with New, then Import Folder. Processing is offline: add an effect, adjust its labeled parameters, and render a copy. Variations are generated from the selected imported sample. Plugin entries are discovered metadata only; VST3 hosting is not available in this build.","Close",this);});
+    OfforLookAndFeel::setIcon(helpButton,"help");helpButton.setTooltip("Quick Help: hover over controls for explanations; open the manual for complete workflows.");
 
-    createButton(playButton, "Play Preview", lighterPanel,
-                 [this]
-    {
-        if (currentReaderSource != nullptr)
-        {
-            transport.start();
-            isPlaying = true;
-            playButton.setButtonText("Playing...");
-        }
-        else
-        {
-            statusLabel.setText(
-                "Import a sample folder first.",
-                juce::dontSendNotification);
-        }
-    });
+    createButton(playButton, "Play Preview", lighterPanel,[this]{togglePreviewPlayback();});
 
     createButton(stopButton, "Stop", lighterPanel,
                  [this]
@@ -217,6 +218,8 @@ MainComponent::MainComponent()
         playButton.setButtonText("Play Preview");
     });
     OfforLookAndFeel::setIcon(playButton,"play");OfforLookAndFeel::setIcon(stopButton,"stop");
+    playButton.setTooltip("Play the selected sample preview.");
+    stopButton.setTooltip("Stop preview playback and return to the start.");
 
     auto addEffect = [this](juce::TextButton& button,
                             const juce::String& name,
@@ -243,6 +246,10 @@ MainComponent::MainComponent()
     createButton(homeNewButton,"New Project",lighterPanel,[this]{createProject();});
     createButton(homeOpenButton,"Open Project",lighterPanel,[this]{openProject();});
     createButton(exportVariationsButton,"Open Variations Export",accentColour,[this]{showPage("Variations");statusLabel.setText("Select cards or use Export Selected for WAV and ZIP options.",juce::dontSendNotification);});
+    searchField.setTooltip("Filter the imported sample list by file name.");
+    categoryFilterBox.setTooltip("Show samples assigned to one category.");
+    categoryBox.setTooltip("Correct the selected sample category; this manual change is saved in the project.");
+    startupAudioToggle.setTooltip("Enable or disable the one-time startup sound.");
 
     addAndMakeVisible(pageTitle);
     addAndMakeVisible(pageSubtitle);
@@ -250,6 +257,7 @@ MainComponent::MainComponent()
     addAndMakeVisible(sampleCountLabel);
     addAndMakeVisible(statusLabel);
     addAndMakeVisible(projectHeading);
+    audioStatusLabel.setColour(juce::Label::textColourId,mutedColour);audioStatusLabel.setJustificationType(juce::Justification::centredRight);audioStatusLabel.setFont(juce::Font(10.5f));audioStatusLabel.setText("Audio output: initializing",juce::dontSendNotification);addAndMakeVisible(audioStatusLabel);
 
     pageTitle.setColour(juce::Label::textColourId, textColour);
     pageTitle.setFont(juce::Font(25.0f, juce::Font::bold));
@@ -364,8 +372,36 @@ void MainComponent::prepareToPlay(
     int samplesPerBlockExpected,
     double sampleRate)
 {
+    outputSampleRate=sampleRate;
+    auto safe=juce::Component::SafePointer<MainComponent>(this);juce::MessageManager::callAsync([safe,sampleRate]{if(safe)safe->audioStatusLabel.setText("Audio output · "+juce::String(sampleRate/1000.0,1)+" kHz",juce::dontSendNotification);});
     transport.prepareToPlay(
         samplesPerBlockExpected, sampleRate);
+}
+
+bool MainComponent::keyPressed(const juce::KeyPress& key,juce::Component* originatingComponent)
+{
+    const auto code=key.getKeyCode();
+    if(key.getModifiers().isCtrlDown())
+    {
+        const auto character=juce::CharacterFunctions::toLowerCase((juce::juce_wchar)key.getTextCharacter());
+        if(character=='s'){saveProject(false);return true;}
+        if(character=='o'){openProject();return true;}
+    }
+    if(code==juce::KeyPress::spaceKey)
+    {
+        if(originatingComponent!=nullptr&&(dynamic_cast<juce::TextEditor*>(originatingComponent)!=nullptr||originatingComponent->findParentComponentOfClass<juce::TextEditor>()!=nullptr))return false;
+        togglePreviewPlayback();return true;
+    }
+    if(code==juce::KeyPress::deleteKey&&currentPage=="Variations")
+    {variationPanel.deleteSelected();return true;}
+    return false;
+}
+
+void MainComponent::togglePreviewPlayback()
+{
+    if(currentReaderSource==nullptr){statusLabel.setText("Select a sample or variation preview first.",juce::dontSendNotification);return;}
+    if(transport.isPlaying()){transport.stop();isPlaying=false;playButton.setButtonText("Resume Preview");}
+    else{if(transport.getCurrentPosition()>=transport.getLengthInSeconds())transport.setPosition(0.0);transport.start();isPlaying=true;playButton.setButtonText("Playing Preview");}
 }
 
 void MainComponent::getNextAudioBlock(
@@ -690,7 +726,11 @@ void MainComponent::resized()
     pluginPanel->setBounds(titleX,titleY+58,contentBounds.getWidth(),contentBounds.getHeight()-58);pluginPanel->setVisible(currentPage=="VST3 Plugins");
     juce::TextButton* nav[]={&homeButton,&libraryButton,&processingButton,&variationsButton,&pluginsButton,&exportButton,&settingsButton};
     int navY=102;for(auto*b:nav){b->setBounds(12,navY,172,40);navY+=47;}
-    projectHeading.setBounds(210,23,122,28);newProjectButton.setBounds(338,20,42,32);openProjectButton.setBounds(384,20,44,32);saveProjectButton.setBounds(432,20,44,32);saveAsProjectButton.setBounds(480,20,56,32);renameProjectButton.setBounds(540,20,58,32);closeProjectButton.setBounds(602,20,46,32);importButton.setBounds(654,20,96,32);importProgress.setBounds(758,25,68,20);cancelImportButton.setBounds(832,20,72,32);exportTopButton.setBounds(getWidth()-116,20,102,32);
+    const double toolbarScale=juce::jlimit(.75,1.0,(getWidth()-1000.0)/240.0);int tx=210;const int headerY=20,headerH=32,gap=juce::roundToInt(5*toolbarScale);const int titleW=juce::roundToInt(160*toolbarScale);projectHeading.setBounds(tx,23,titleW,28);tx+=titleW+gap;
+    auto put=[&tx,gap,headerY,headerH,toolbarScale](juce::Component&c,int base){const int width=juce::jmax(40,juce::roundToInt(base*toolbarScale));c.setBounds(tx,headerY,width,headerH);tx+=width+gap;};
+    put(newProjectButton,60);put(openProjectButton,74);put(saveProjectButton,64);put(saveAsProjectButton,80);put(renameProjectButton,74);put(closeProjectButton,56);put(importButton,112);
+    const int progressWidth=juce::roundToInt(68*toolbarScale);importProgress.setBounds(tx,25,progressWidth,20);const int cancelWidth=juce::roundToInt(40*toolbarScale);cancelImportButton.setBounds(tx+progressWidth+gap,headerY,cancelWidth,headerH);tx+=progressWidth+cancelWidth+2*gap;
+    helpButton.setBounds(getWidth()-150,headerY,28,headerH);exportTopButton.setBounds(getWidth()-116,headerY,102,headerH);
     pageTitle.setText(currentPage,juce::dontSendNotification);pageTitle.setFont(juce::Font(25.0f,juce::Font::bold));pageSubtitle.setFont(juce::Font(12.0f));
     const int areaY=titleY+70,areaH=contentBounds.getHeight()-76,x=contentBounds.getX(),w=contentBounds.getWidth();
     const int homeLeft=(w-14)*58/100,homeRightX=x+homeLeft+30,homeActionW=juce::jmax(78,(w-homeLeft-56)/3);homeImportButton.setBounds(homeRightX,areaY+252,homeActionW,32);homeNewButton.setBounds(homeRightX+homeActionW+8,areaY+252,homeActionW,32);homeOpenButton.setBounds(homeRightX+2*(homeActionW+8),areaY+252,homeActionW,32);
@@ -699,6 +739,6 @@ void MainComponent::resized()
     const int rx=x+leftW+32;selectedSampleLabel.setBounds(rx,areaY+48,w-leftW-188,28);categoryBox.setBounds(x+w-164,areaY+48,148,30);metadataLabel.setBounds(rx,areaY+78,w-leftW-48,42);metadataLabel.setFont(juce::Font(11.0f));waveformBounds={rx,areaY+124,w-leftW-48,juce::jmax(90,areaH-205)};playButton.setBounds(rx,areaY+areaH-64,118,34);stopButton.setBounds(rx+126,areaY+areaH-64,70,34);relinkButton.setBounds(rx+204,areaY+areaH-64,122,34);
     startupAudioToggle.setBounds(x+24,areaY+150,300,30);
     exportVariationsButton.setBounds(x+28,areaY+302,190,36);
-    sampleCountLabel.setBounds(18,getHeight()-23,170,18);statusLabel.setBounds(210,getHeight()-23,getWidth()-226,18);
+    sampleCountLabel.setBounds(18,getHeight()-23,170,18);statusLabel.setBounds(210,getHeight()-23,juce::jmax(120,getWidth()-410),18);audioStatusLabel.setBounds(getWidth()-194,getHeight()-23,178,18);
     homeImportButton.setVisible(currentPage=="Home");homeNewButton.setVisible(currentPage=="Home");homeOpenButton.setVisible(currentPage=="Home");startupAudioToggle.setVisible(currentPage=="Settings");
 }

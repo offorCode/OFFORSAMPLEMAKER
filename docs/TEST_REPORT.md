@@ -28,3 +28,9 @@ The Release app was launched and Home, Sample Library, Processing, and Variation
 ## Limitations
 
 VST3 hosting remains the main milestone blocker. VST2 remains disabled. Pack export includes available variation WAVs only; source sample packaging and full project export are not implemented. The Export/ZIP UI action itself is not automated end-to-end; the extracted export functions are covered by the regression executable.
+
+## Final UI polish checks (2026-11-09)
+
+The global JUCE TooltipWindow uses a 500 ms delay and the OFFOR dark/orange palette. Toolbar, navigation, processing parameters, variation settings/actions, and plugin discovery controls now have explanatory tooltips. A header **?** button opens Quick Help. Keyboard routing was added for Ctrl+S, Ctrl+O, Space preview pause/resume, and Delete confirmation for unlocked variation records. The plugin list distinguishes effects/instruments and labels all rows **Discovered**; loadable/loaded/active states are not asserted.
+
+The Release application and regression executable were rebuilt after these code changes. The regression executable passed again. No manual keyboard/tooltip interaction, final DPI/resize sweep, or screenshot capture was completed in this run. These checks remain unverified; the screenshots folder has no captured release screenshots.

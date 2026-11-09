@@ -15,6 +15,7 @@ public:
     void setData(const VariationSettings&,const juce::Array<Variation>&);
     void setCallbacks(StateChanged,Preview);
     void cancelGeneration();
+    void deleteSelected();
 private:
     void timerCallback()override;void refresh();void renderTargets(juce::Array<int>);void renderAllUnlocked();void renderSelected();void cancel();void exportSelected();void beginExport(bool allVariations,bool zipArchive);void save();void updateThumbnails();void notifyChanges();void selectCard(int,bool);void updateSelectedCard();void previewCard(int);void toggleCardLock(int);void toggleCardFavorite(int);int getSelectedRow()const{return selectedRow;}
     juce::AudioFormatManager& formats;juce::AudioThumbnailCache& thumbnailCache;juce::AudioThumbnail originalThumb,variationThumb;juce::File source,assets;juce::String sampleId,category;std::vector<EffectSettings> baseEffects;VariationSettings settings;juce::Array<Variation> variations;juce::ThreadPool pool{1};std::shared_ptr<std::atomic<bool>> cancelToken;juce::uint64 generation=0;bool rendering=false;double progressValue=0;

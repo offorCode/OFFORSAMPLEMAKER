@@ -36,7 +36,7 @@ Audio operations include Normalize, Reverse, Trim Silence, Fade In, and Fade Out
 
 Choose **Variations** with a source sample selected in an open project. The top section shows the original waveform and playback controls. Set the variation count and intensity, adjust randomization strength, and choose **Generate Variations**. Five is the default count. Generation uses the existing built-in DSP renderer and creates separate uniquely named audio files. The selected intensity limits randomization; results are not claims of musical quality.
 
-Open **Advanced Effect Ranges** to choose allowed effects and adjust maximum gain, EQ, and drive ranges. Use **Regenerate Selected** for selected unlocked cards or **Regenerate Unlocked** for unlocked slots. Lock a variation to protect it. Favorite, rename, select, play, compare, and delete controls operate on actual variation records and files; right-click a card for additional per-card actions. Deleted history records remain in project history. Choose **Export Selected** to copy selected WAV variation files to a folder with unique names. Missing variation files are shown as missing rather than represented by a fabricated waveform.
+Open **Advanced Effect Ranges** to choose allowed effects and adjust maximum gain, EQ, and drive ranges. Use **Regenerate Selected** for selected unlocked cards or **Regenerate Unlocked** for unlocked slots. Lock a variation to protect it. Favorite, rename, select, play, compare, and delete controls operate on actual variation records and files; right-click a card for additional per-card actions. Delete asks for confirmation, locked variations are protected, and deleted history records remain in project history. Choose **Export Selected** to copy selected WAV variation files to a folder with unique names. Missing variation files are shown as missing rather than represented by a fabricated waveform.
 
 ## 8. VST plugin discovery
 
@@ -46,7 +46,7 @@ Choose **VST3 Plugins**. The application scans the standard Windows VST3 folders
 
 The Export page provides a route to the Variations page. From there select one or more variation cards and use **Export Selected** to copy WAVs. Create a ZIP from selected or all available variation WAV files from the same menu. Full source-sample/project packaging is not implemented.
 
-## 10. Settings and help
+## Settings and help
 
 Choose **Settings** to enable or disable startup audio. Buttons with icons show a short purpose tooltip when hovered. The UI is resizable; the sample cards and variation grid scroll when content exceeds the visible area.
 
@@ -65,6 +65,21 @@ Choose **Settings** to enable or disable startup audio. Buttons with icons show 
 - **Implemented but not yet fully verified in the interactive application:** the redesigned navigation and page layouts, start-up preference, real-time UI behavior at all sizes, and a full scan of every installed plugin bundle.
 - **Planned/not implemented:** VST3 plugin instantiation, plugin editor windows, plugin effect/instrument audio routing, MIDI instrument rendering, full source-sample/project pack export.
 - **Unsupported in this build:** VST2 hosting.
+
+
+
+## Keyboard shortcuts and status
+
+Choose **Settings** to enable or disable startup audio. The **?** button in the header opens Quick Help. Buttons and smaller controls display contextual tooltips after a short hover delay. The status footer shows the current audio output sample rate when the audio device is available.
+
+Keyboard shortcuts:
+
+- **Ctrl+S** saves the current project.
+- **Ctrl+O** opens a project.
+- **Space** pauses or resumes the current sample/variation preview (when a text editor is not active).
+- **Delete** asks for confirmation before removing selected unlocked variations. Locked variations cannot be deleted until unlocked.
+
+The UI is resizable; the sample list and variation cards can scroll when content exceeds the visible area. High-DPI behavior follows JUCE's display scaling; this release pass did not include a full multi-monitor/DPI matrix test.
 
 
 
